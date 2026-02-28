@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => {
         env.NEW_GEMINI_API_KEY ? `Key 2 (...${env.NEW_GEMINI_API_KEY.slice(-4)})` : 'Key 2 (Not Set)'
       ),
       'process.env.HAS_API_KEY_2': JSON.stringify(!!env.NEW_GEMINI_API_KEY),
+      'process.env.KLING_ACCESS_KEY': JSON.stringify(env.KLING_ACCESS_KEY || ''),
+      'process.env.KLING_SECRET_KEY': JSON.stringify(env.KLING_SECRET_KEY || ''),
+      'process.env.HAS_KLING_KEY': JSON.stringify(!!env.KLING_ACCESS_KEY && !!env.KLING_SECRET_KEY),
     },
     resolve: {
       alias: {

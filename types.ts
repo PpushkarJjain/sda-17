@@ -1,4 +1,15 @@
 export type FashionCategory = 'saree' | 'kurti' | 'jewelry' | 'lehenga';
+export type VideoProvider = 'gemini' | 'kling';
+
+export interface KlingCameraControl {
+  type: 'simple';
+  config: {
+    horizontal?: number;  // pan: -10 to 10
+    vertical?: number;    // tilt: -10 to 10
+    zoom?: number;        // zoom: -10 to 10
+    roll?: number;        // rotate: -10 to 10
+  };
+}
 
 export interface SareeImage {
   file: File;
@@ -75,12 +86,12 @@ export interface SavedPreset {
     skirtVolume?: string;
     drapingStyle?: string;
     blouseCut?: string;
-    
+
     resolution: string;
     aspectRatio: string;
     additionalDetails: string;
     enableEnhancedAnalysis: boolean;
-    enableEnhancedRealism?: boolean; 
+    enableEnhancedRealism?: boolean;
     fidelityMode?: 'accurate' | 'marketing';
     modelDescription?: string;
     lockRefIdentity?: boolean;
