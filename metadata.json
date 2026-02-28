@@ -1,0 +1,5 @@
+{
+  "name": "17. stable with security",
+  "description": "An AI-powered application that takes a photo of a saree and generates realistic images of a model wearing it, complete with various poses and backgrounds.",
+  "requestFramePermissions": []
+}
