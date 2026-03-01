@@ -212,7 +212,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-0 md:px-4 lg:px-6">
+        <div className="max-w-[1600px] mx-auto px-0 md:px-4 lg:px-6">
 
             {/* Mobile Header Context */}
             <div className="lg:hidden px-4 mb-6">
@@ -222,10 +222,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 <p className="text-gray-500 text-sm mt-1">Transform static photos into cinematic videos.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8 items-start">
 
                 {/* Left Column: Input & Controls (Sticky on Desktop, Scroll on Mobile) */}
-                <div className="lg:col-span-1 xl:col-span-1 flex flex-col gap-6 lg:sticky lg:top-24 lg:z-10 lg:h-[calc(100vh-8rem)]">
+                <div className="lg:col-span-2 flex flex-col gap-6">
 
                     {/* 0. Category Selector */}
                     {onCategoryChange && (
@@ -273,7 +273,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     </div>
 
                     {/* 2. Video Controls */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-rose-100 overflow-hidden flex flex-col flex-grow min-h-0 lg:min-h-0 mx-4 lg:mx-0">
+                    <div className="bg-white rounded-2xl shadow-sm border border-rose-100 overflow-hidden flex flex-col mx-4 lg:mx-0">
                         <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex-shrink-0">
                             <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm uppercase tracking-wider">
                                 <span className="bg-rose-100 text-rose-600 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
@@ -286,7 +286,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                         Desktop: h-full to fill the sticky sidebar container. 
                      */}
                         <VideoControls
-                            className="h-auto lg:h-full"
+                            className=""
                             category={category}
                             activeTab={activeTab}
                             setActiveTab={setActiveTab}
@@ -315,10 +315,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 </div>
 
                 {/* Right Column: Preview & Output */}
-                <div className="lg:col-span-2 xl:col-span-3 flex flex-col gap-6 px-4 lg:px-0">
+                <div className="lg:col-span-3 flex flex-col gap-6 px-4 lg:px-0 lg:sticky lg:top-24 lg:self-start">
 
                     {/* Main Preview Player Stage */}
-                    <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative flex flex-col min-h-[400px] sm:min-h-[500px] lg:h-[650px]">
+                    <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative flex flex-col min-h-[400px] sm:min-h-[500px] lg:h-[600px]">
 
                         {/* Player Header / Toolbar */}
                         <div className="bg-gray-800/80 backdrop-blur-md px-4 py-3 flex flex-wrap gap-2 justify-between items-center border-b border-white/5 z-20">

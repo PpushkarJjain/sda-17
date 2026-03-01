@@ -127,7 +127,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
 
     return (
         <div className={`flex flex-col bg-gray-50 ${className}`}>
-            <div className="p-4 sm:p-5 space-y-6 flex-grow overflow-y-auto custom-scrollbar">
+            <div className="p-4 sm:p-5 space-y-6 flex-grow">
                 {/* Video Provider Selector */}
                 {klingAvailable && (
                     <div className="flex-shrink-0">
