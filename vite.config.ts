@@ -8,6 +8,14 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      proxy: {
+        '/api/kling': {
+          target: 'https://api.klingai.com',
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/api\/kling/, '/v1'),
+          secure: true,
+        },
+      },
     },
     plugins: [react()],
     define: {
