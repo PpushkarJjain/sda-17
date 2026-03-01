@@ -258,7 +258,7 @@ export const generateKlingVideo = async (
         duration: config.duration || '5',
         aspect_ratio: config.aspectRatio || '9:16',
         prompt: fullPrompt,
-        image: `data:${mimeType};base64,${base64Data}`,
+        image: base64Data,
     };
 
     // Add camera control if specified
