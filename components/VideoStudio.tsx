@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ImageUploadSlot from './ImageUploadSlot';
-import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration } from '../types';
+import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration, VideoPromptSegment } from '../types';
 import VideoControls, { categoryTemplates, VideoTemplate } from './VideoControls';
 import { analyzeReferenceVideo, generateFashionVideo, extendFashionVideo } from '../services/geminiService';
 import { generateKlingVideo, extendKlingVideo, isKlingAvailable, type KlingVideoConfig } from '../services/klingService';
@@ -38,6 +38,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
 
     // Reference Prompt Generation State
     const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
+    const [refPromptSegments, setRefPromptSegments] = useState<VideoPromptSegment[]>([]);
 
     // Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -89,9 +90,15 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     finalPrompt += `. ${templateCustomPrompt.trim()}`;
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                setStatus("Analyzing Reference Video...");
-                const analysis = await analyzeReferenceVideo(referenceVideo);
-                finalPrompt = analysis;
+                // Use the first segment prompt if already analyzed, otherwise analyze now
+                if (refPromptSegments.length > 0) {
+                    finalPrompt = refPromptSegments[0].prompt;
+                } else {
+                    setStatus("Analyzing Reference Video...");
+                    const segments = await analyzeReferenceVideo(referenceVideo);
+                    setRefPromptSegments(segments);
+                    finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
+                }
                 if (referenceAdditionalDetails.trim()) {
                     finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
                 }
@@ -224,9 +231,14 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const handleGeneratePromptFromRef = async () => {
         if (!referenceVideo) return;
         setIsAnalyzingRef(true);
+        setRefPromptSegments([]);
         try {
-            const analysis = await analyzeReferenceVideo(referenceVideo);
-            setReferenceAdditionalDetails(analysis);
+            const segments = await analyzeReferenceVideo(referenceVideo);
+            setRefPromptSegments(segments);
+            // Auto-fill the additional details with the first segment for immediate use
+            if (segments.length > 0) {
+                setReferenceAdditionalDetails(segments[0].prompt);
+            }
         } catch (e: any) {
             setError(e.message || 'Failed to analyze reference video.');
         } finally {
@@ -337,6 +349,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setKlingWithAudio={setKlingWithAudio}
                             onGeneratePromptFromRef={handleGeneratePromptFromRef}
                             isAnalyzingRef={isAnalyzingRef}
+                            refPromptSegments={refPromptSegments}
                         />
                     </div>
                 </div>

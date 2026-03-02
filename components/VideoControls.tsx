@@ -3,8 +3,9 @@ import { FilmIcon } from './icons/FilmIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { PlayIcon } from './icons/PlayIcon';
 import Spinner from './Spinner';
-import { FashionCategory, VideoProvider, KlingCameraControl, KlingDuration } from '../types';
+import { FashionCategory, VideoProvider, KlingCameraControl, KlingDuration, VideoPromptSegment } from '../types';
 import { isKlingAvailable } from '../services/klingService';
+import SegmentedPromptPanel from './SegmentedPromptPanel';
 
 export interface VideoTemplate {
     id: string;
@@ -71,6 +72,7 @@ interface VideoControlsProps {
     // Reference video prompt generation
     onGeneratePromptFromRef?: () => void;
     isAnalyzingRef?: boolean;
+    refPromptSegments?: VideoPromptSegment[];
 }
 
 const CAMERA_PRESETS = [
@@ -126,6 +128,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     setKlingWithAudio,
     onGeneratePromptFromRef,
     isAnalyzingRef,
+    refPromptSegments,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -330,6 +333,11 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                     </button>
                                 )}
                             </div>
+
+                            {/* Segmented Prompt Results */}
+                            {refPromptSegments && refPromptSegments.length > 0 && (
+                                <SegmentedPromptPanel segments={refPromptSegments} />
+                            )}
 
                             <div>
                                 <label htmlFor="additional-details" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Additional Details (Optional)</label>

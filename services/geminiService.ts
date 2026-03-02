@@ -913,7 +913,7 @@ export const generateVariation = async (
   return refineGeneratedImage(base64Data, 'image/jpeg', config.sareeEditPrompt);
 };
 
-export const analyzeReferenceVideo = async (videoFile: File): Promise<string> => {
+export const analyzeReferenceVideo = async (videoFile: File): Promise<import('../types').VideoPromptSegment[]> => {
   const apiKey = getActiveApiKey();
   const ai = new GoogleGenAI({ apiKey });
   const reader = new FileReader();
@@ -921,12 +921,59 @@ export const analyzeReferenceVideo = async (videoFile: File): Promise<string> =>
     reader.readAsDataURL(videoFile);
     reader.onload = () => resolve((reader.result as string).split(',')[1]);
   });
+
+  const systemPrompt = `You are an expert AI video prompt engineer. Analyze this reference video and break it into 5-second segments for AI video generation.
+
+For each 5-second segment, write a DIRECT, ACTIONABLE generation prompt — NOT a description of what happens.
+
+Rules:
+- Each prompt must be a generation instruction, not a narrative description
+- Focus on: subject movement, pose transitions, fabric/material behavior, camera motion
+- Each extension prompt must start with "Continue smoothly:" and maintain continuity
+- Keep lighting, background, and style consistent across all segments
+- Use cinematic language: "slow dolly", "tracking shot", "rack focus", etc.
+- Each prompt should be 2-3 sentences maximum
+- If the video is shorter than 10 seconds, output just 1-2 segments
+
+Return ONLY a valid JSON array (no markdown, no backticks, no explanation), in this exact format:
+[
+  {"label": "First 5 Seconds", "prompt": "...", "cameraAction": "..."},
+  {"label": "Extension 1 (+5s)", "prompt": "Continue smoothly: ...", "cameraAction": "..."},
+  {"label": "Extension 2 (+5s)", "prompt": "Continue smoothly: ...", "cameraAction": "..."}
+]
+
+The "cameraAction" field should be a short camera instruction like "Slow zoom in", "Pan left to right", "Static wide shot", "Orbit 180°", etc.`;
+
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: "Analyze video motion." }, { inlineData: { data: videoBase64, mimeType: videoFile.type } }] }]
+      model: 'gemini-2.5-flash',
+      contents: [{ parts: [{ text: systemPrompt }, { inlineData: { data: videoBase64, mimeType: videoFile.type } }] }]
     });
-    return response.text || "Cinematic motion.";
+
+    const rawText = (response.text || '').trim();
+
+    // Try to parse JSON from the response
+    try {
+      // Strip markdown code fences if present
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].prompt) {
+        return parsed.map((seg: any, i: number) => ({
+          label: seg.label || (i === 0 ? 'First 5 Seconds' : `Extension ${i} (+5s)`),
+          prompt: seg.prompt || '',
+          cameraAction: seg.cameraAction || seg.camera_action || 'Not specified'
+        }));
+      }
+    } catch {
+      // JSON parse failed — fall through to fallback
+    }
+
+    // Fallback: wrap plain text as a single segment
+    return [{
+      label: 'First 5 Seconds',
+      prompt: rawText || 'Cinematic fashion showcase with smooth motion.',
+      cameraAction: 'Smooth tracking shot'
+    }];
   } catch (error) {
     return handleApiError(error);
   }
