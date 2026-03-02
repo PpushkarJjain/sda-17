@@ -222,7 +222,7 @@ export const generateKlingVideo = async (
     imageBase64DataUrl: string,
     config: KlingVideoConfig = {},
     onStatusUpdate?: (status: string) => void
-): Promise<{ url: string; taskId: string }> => {
+): Promise<{ url: string; taskId: string; videoId: string }> => {
     if (!isKlingAvailable()) {
         throw new Error('Kling AI is not configured. Add KLING_ACCESS_KEY and KLING_SECRET_KEY to your .env file.');
     }
@@ -234,20 +234,20 @@ export const generateKlingVideo = async (
     const mimeMatch = header?.match(/data:(image\/[^;]+)/);
     const mimeType = mimeMatch?.[1] || 'image/jpeg';
 
-    // Build category-aware prompt prefix
+    // Build category-aware prompt prefix (Kling-optimized: concise, action-focused)
     let contextPrefix = '';
     switch (category) {
         case 'jewelry':
-            contextPrefix = 'Cinematic jewelry product video. Macro shot. Luxury lighting with specular highlights on metal and gems.';
+            contextPrefix = 'Extreme close-up of luxury jewelry. Light catches gemstones and polished metal surfaces. Subtle rotation reveals intricate details.';
             break;
         case 'kurti':
-            contextPrefix = 'Fashion model wearing ethnic Indian Kurti. Modern chic vibe. Smooth motion.';
+            contextPrefix = 'Fashion model poses in Indian Kurti. Fabric moves naturally with body motion.';
             break;
         case 'lehenga':
-            contextPrefix = 'Fashion model wearing voluminous Lehenga Choli. Grand royal wedding look. Focus on skirt flare and embroidery details.';
+            contextPrefix = 'Model spins slowly in heavy Lehenga, skirt flares outward revealing embroidery layers. Dupatta trails gracefully.';
             break;
         default:
-            contextPrefix = 'Indian saree fashion showcase. Traditional elegance. Flowing fabric movement.';
+            contextPrefix = 'Model walks forward in draped saree, pallu flows over shoulder. Silk fabric catches light with each step.';
     }
 
     const fullPrompt = `${contextPrefix} ${prompt}`.trim();
@@ -288,8 +288,15 @@ export const generateKlingVideo = async (
     // Poll for completion
     const completedTask = await pollTask(taskId, '/videos/image2video', onStatusUpdate);
 
-    // Get the video URL from the result
-    const videoUrl = completedTask?.task_result?.videos?.[0]?.url;
+    // Get the video URL and ID from the result
+    const videoResult = completedTask?.task_result?.videos?.[0];
+    console.log('[Kling Generate] Full task result:', JSON.stringify(completedTask, null, 2));
+    console.log('[Kling Generate] Video result object:', JSON.stringify(videoResult, null, 2));
+    console.log('[Kling Generate] Task ID:', taskId);
+    console.log('[Kling Generate] Video ID (from result.id):', videoResult?.id);
+    console.log('[Kling Generate] Video ID (from result.video_id):', videoResult?.video_id);
+    const videoUrl = videoResult?.url;
+    const videoId = videoResult?.id || videoResult?.video_id;
     if (!videoUrl) {
         throw new Error('Kling task completed but no video URL was returned.');
     }
@@ -300,18 +307,18 @@ export const generateKlingVideo = async (
     const videoBlob = await videoResponse.blob();
     const blobUrl = URL.createObjectURL(videoBlob);
 
-    return { url: blobUrl, taskId };
+    return { url: blobUrl, taskId, videoId: videoId || taskId };
 };
 
 /**
  * Extend an existing Kling video by 5 additional seconds.
  */
 export const extendKlingVideo = async (
-    previousTaskId: string,
+    previousVideoId: string,
     prompt: string,
     config: KlingVideoConfig = {},
     onStatusUpdate?: (status: string) => void
-): Promise<{ url: string; taskId: string }> => {
+): Promise<{ url: string; taskId: string; videoId: string }> => {
     if (!isKlingAvailable()) {
         throw new Error('Kling AI is not configured.');
     }
@@ -321,15 +328,18 @@ export const extendKlingVideo = async (
     const body: any = {
         model_name: config.model || 'kling-v3-0',
         mode: config.mode || 'pro',
-        prompt: `Continue smoothly: ${prompt}`,
-        task_id: previousTaskId
+        prompt: prompt.toLowerCase().startsWith('continue') ? prompt : `Continue smoothly: ${prompt}`,
+        video_id: previousVideoId
     };
+
+    console.log('[Kling Extend] Sending video_id:', previousVideoId);
+    console.log('[Kling Extend] Full request body:', JSON.stringify(body, null, 2));
 
     if (config.withAudio) {
         body.with_audio = true;
     }
 
-    const createResult = await klingFetch('/videos/extend', {
+    const createResult = await klingFetch('/videos/video-extend', {
         method: 'POST',
         body: JSON.stringify(body)
     });
@@ -341,9 +351,11 @@ export const extendKlingVideo = async (
 
     onStatusUpdate?.('Extension in progress...');
 
-    const completedTask = await pollTask(taskId, '/videos/extend', onStatusUpdate);
+    const completedTask = await pollTask(taskId, '/videos/video-extend', onStatusUpdate);
 
-    const videoUrl = completedTask?.task_result?.videos?.[0]?.url;
+    const videoResult = completedTask?.task_result?.videos?.[0];
+    const videoUrl = videoResult?.url;
+    const videoId = videoResult?.id;
     if (!videoUrl) {
         throw new Error('Kling extension completed but no video URL was returned.');
     }
@@ -353,5 +365,5 @@ export const extendKlingVideo = async (
     const videoBlob = await videoResponse.blob();
     const blobUrl = URL.createObjectURL(videoBlob);
 
-    return { url: blobUrl, taskId };
+    return { url: blobUrl, taskId, videoId: videoId || taskId };
 };

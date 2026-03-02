@@ -31,7 +31,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
 
     // Provider State
     const [videoProvider, setVideoProvider] = useState<VideoProvider>('gemini');
-    const [klingModel, setKlingModel] = useState('kling-v2-1');
+    const [klingModel, setKlingModel] = useState('kling-v2-6');
     const [klingDuration, setKlingDuration] = useState<KlingDuration>('5');
     const [klingCameraControl, setKlingCameraControl] = useState<KlingCameraControl | null>(null);
     const [klingWithAudio, setKlingWithAudio] = useState(false);
@@ -48,6 +48,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [currentVideoResource, setCurrentVideoResource] = useState<any | null>(null);
     const [currentVideoProvider, setCurrentVideoProvider] = useState<VideoProvider>('gemini');
     const [currentKlingTaskId, setCurrentKlingTaskId] = useState<string | null>(null);
+    const [currentKlingVideoId, setCurrentKlingVideoId] = useState<string | null>(null);
+    const [currentKlingModel, setCurrentKlingModel] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     // Extension UI State
@@ -55,7 +57,11 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [extensionPrompt, setExtensionPrompt] = useState('');
 
     // History State
-    const [history, setHistory] = useState<{ url: string, resource?: any, klingTaskId?: string, provider: VideoProvider, timestamp: number, name: string }[]>([]);
+    const [history, setHistory] = useState<{ url: string, resource?: any, klingTaskId?: string, klingVideoId?: string, klingModelUsed?: string, provider: VideoProvider, timestamp: number, name: string }[]>([]);
+
+    // Extension support: only Kling v1.0 and Omni/v3 support extension. v1.5/v1.6/v2.x do NOT.
+    // Since we don't offer v1.0 and v3/Omni isn't available on the direct API yet, extension is currently Gemini-only.
+    const canExtendKling = false;
 
     // Update selected template when category changes to avoid invalid template
     useEffect(() => {
@@ -125,11 +131,15 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 setCurrentVideoUrl(result.url);
                 setCurrentVideoResource(null);
                 setCurrentKlingTaskId(result.taskId);
+                setCurrentKlingVideoId(result.videoId);
+                setCurrentKlingModel(klingModel);
                 setCurrentVideoProvider('kling');
 
                 const newEntry = {
                     url: result.url,
                     klingTaskId: result.taskId,
+                    klingVideoId: result.videoId,
+                    klingModelUsed: klingModel,
                     provider: 'kling' as VideoProvider,
                     timestamp: Date.now(),
                     name: `[Kling] ${activeTab === 'template' ? selectedTemplate.name : 'Custom Reference Video'}`
@@ -171,21 +181,25 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         setStatus("Starting Extension...");
 
         try {
-            if (currentVideoProvider === 'kling' && currentKlingTaskId) {
+            if (currentVideoProvider === 'kling' && currentKlingVideoId) {
                 // --- Kling extension ---
                 const klingExtendConfig: KlingVideoConfig = {
                     model: klingModel,
                     mode: 'pro',
                     withAudio: klingWithAudio,
                 };
-                const result = await extendKlingVideo(currentKlingTaskId, direction, klingExtendConfig, (s) => setStatus(s));
+                const result = await extendKlingVideo(currentKlingVideoId, direction, klingExtendConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
                 setCurrentKlingTaskId(result.taskId);
+                setCurrentKlingVideoId(result.videoId);
+                setCurrentKlingModel(klingModel);
                 setExtensionPrompt('');
 
                 const newEntry = {
                     url: result.url,
                     klingTaskId: result.taskId,
+                    klingVideoId: result.videoId,
+                    klingModelUsed: klingModel,
                     provider: 'kling' as VideoProvider,
                     timestamp: Date.now(),
                     name: `[Kling] Extended: ${activeTab === 'template' ? selectedTemplate.name : 'Custom Video'}`
@@ -219,10 +233,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         }
     };
 
-    const handleSelectHistory = (item: { url: string, resource?: any, klingTaskId?: string, provider: VideoProvider }) => {
+    const handleSelectHistory = (item: { url: string, resource?: any, klingTaskId?: string, klingVideoId?: string, klingModelUsed?: string, provider: VideoProvider }) => {
         setCurrentVideoUrl(item.url);
         setCurrentVideoResource(item.resource || null);
         setCurrentKlingTaskId(item.klingTaskId || null);
+        setCurrentKlingVideoId(item.klingVideoId || null);
+        setCurrentKlingModel(item.klingModelUsed || null);
         setCurrentVideoProvider(item.provider);
         setShowExtendInput(false);
         setError(null);
@@ -368,8 +384,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                 <span className="text-sm font-semibold tracking-wide sm:hidden">Preview</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                {/* Extend Button */}
-                                {currentVideoUrl && (currentVideoResource || currentKlingTaskId) && !showExtendInput && (
+                                {/* Extend Button — Gemini or v1.x Kling only */}
+                                {currentVideoUrl && (currentVideoResource || canExtendKling) && !showExtendInput && (
                                     <button
                                         onClick={() => { setShowExtendInput(true); setError(null); }}
                                         disabled={isExtending}
@@ -379,6 +395,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                         <span className="hidden sm:inline">Extend Scene (+5s)</span>
                                         <span className="sm:hidden">Extend</span>
                                     </button>
+                                )}
+                                {/* Extension not supported tip for Kling */}
+                                {currentVideoUrl && currentVideoProvider === 'kling' && !showExtendInput && (
+                                    <span className="text-[10px] text-amber-400 bg-amber-900/30 px-3 py-1.5 rounded-lg cursor-help" title="Kling v2.x doesn't support extension. Only v1.0 and Omni/v3 do. Generate longer initial videos (10s) instead.">
+                                        💡 Tip: Use 10s duration
+                                    </span>
                                 )}
                                 {currentVideoUrl && (
                                     <a

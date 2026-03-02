@@ -174,9 +174,9 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                 onChange={e => setKlingModel(e.target.value)}
                                 className="w-full px-3 py-2 text-sm bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
                             >
+                                <option value="kling-v2-6">Kling v2.6 (Best Quality + Audio)</option>
                                 <option value="kling-v2-1">Kling v2.1 (Standard)</option>
-                                <option value="kling-v2-6">Kling v2.6 (with Audio)</option>
-                                <option value="kling-v3-0">Kling 3.0 (Beta — may require API update)</option>
+                                <option value="kling-v3-0">Kling 3.0 / Omni (Beta — Extensions when available)</option>
                             </select>
                         </div>
 
