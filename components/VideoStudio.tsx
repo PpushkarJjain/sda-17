@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ImageUploadSlot from './ImageUploadSlot';
-import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl } from '../types';
+import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration } from '../types';
 import VideoControls, { categoryTemplates, VideoTemplate } from './VideoControls';
 import { analyzeReferenceVideo, generateFashionVideo, extendFashionVideo } from '../services/geminiService';
 import { generateKlingVideo, extendKlingVideo, isKlingAvailable, type KlingVideoConfig } from '../services/klingService';
@@ -32,8 +32,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     // Provider State
     const [videoProvider, setVideoProvider] = useState<VideoProvider>('gemini');
     const [klingModel, setKlingModel] = useState('kling-v2-1');
-    const [klingDuration, setKlingDuration] = useState<'5' | '10'>('5');
+    const [klingDuration, setKlingDuration] = useState<KlingDuration>('5');
     const [klingCameraControl, setKlingCameraControl] = useState<KlingCameraControl | null>(null);
+    const [klingWithAudio, setKlingWithAudio] = useState(false);
+
+    // Reference Prompt Generation State
+    const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
 
     // Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -108,6 +112,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     duration: klingDuration,
                     aspectRatio: '9:16',
                     cameraControl: klingCameraControl,
+                    withAudio: klingWithAudio,
                 };
                 const result = await generateKlingVideo(category, finalPrompt, base64Image, klingConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
@@ -161,7 +166,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         try {
             if (currentVideoProvider === 'kling' && currentKlingTaskId) {
                 // --- Kling extension ---
-                const result = await extendKlingVideo(currentKlingTaskId, direction, (s) => setStatus(s));
+                const klingExtendConfig: KlingVideoConfig = {
+                    model: klingModel,
+                    mode: 'pro',
+                    withAudio: klingWithAudio,
+                };
+                const result = await extendKlingVideo(currentKlingTaskId, direction, klingExtendConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
                 setCurrentKlingTaskId(result.taskId);
                 setExtensionPrompt('');
@@ -209,6 +219,19 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         setCurrentVideoProvider(item.provider);
         setShowExtendInput(false);
         setError(null);
+    };
+
+    const handleGeneratePromptFromRef = async () => {
+        if (!referenceVideo) return;
+        setIsAnalyzingRef(true);
+        try {
+            const analysis = await analyzeReferenceVideo(referenceVideo);
+            setReferenceAdditionalDetails(analysis);
+        } catch (e: any) {
+            setError(e.message || 'Failed to analyze reference video.');
+        } finally {
+            setIsAnalyzingRef(false);
+        }
     };
 
     return (
@@ -310,6 +333,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setKlingDuration={setKlingDuration}
                             klingCameraControl={klingCameraControl}
                             setKlingCameraControl={setKlingCameraControl}
+                            klingWithAudio={klingWithAudio}
+                            setKlingWithAudio={setKlingWithAudio}
+                            onGeneratePromptFromRef={handleGeneratePromptFromRef}
+                            isAnalyzingRef={isAnalyzingRef}
                         />
                     </div>
                 </div>

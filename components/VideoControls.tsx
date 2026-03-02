@@ -3,7 +3,7 @@ import { FilmIcon } from './icons/FilmIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { PlayIcon } from './icons/PlayIcon';
 import Spinner from './Spinner';
-import { FashionCategory, VideoProvider, KlingCameraControl } from '../types';
+import { FashionCategory, VideoProvider, KlingCameraControl, KlingDuration } from '../types';
 import { isKlingAvailable } from '../services/klingService';
 
 export interface VideoTemplate {
@@ -62,10 +62,15 @@ interface VideoControlsProps {
     // Kling-specific config
     klingModel: string;
     setKlingModel: (m: string) => void;
-    klingDuration: '5' | '10';
-    setKlingDuration: (d: '5' | '10') => void;
+    klingDuration: KlingDuration;
+    setKlingDuration: (d: KlingDuration) => void;
     klingCameraControl: KlingCameraControl | null;
     setKlingCameraControl: (c: KlingCameraControl | null) => void;
+    klingWithAudio: boolean;
+    setKlingWithAudio: (a: boolean) => void;
+    // Reference video prompt generation
+    onGeneratePromptFromRef?: () => void;
+    isAnalyzingRef?: boolean;
 }
 
 const CAMERA_PRESETS = [
@@ -117,6 +122,10 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     setKlingDuration,
     klingCameraControl,
     setKlingCameraControl,
+    klingWithAudio,
+    setKlingWithAudio,
+    onGeneratePromptFromRef,
+    isAnalyzingRef,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -163,8 +172,8 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                 className="w-full px-3 py-2 text-sm bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
                             >
                                 <option value="kling-v2-1">Kling v2.1 (Standard)</option>
-                                <option value="kling-v2-6">Kling v2.6 Pro (with Audio)</option>
-                                <option value="kling-v2-5-turbo">Kling v2.5 Turbo (Fast)</option>
+                                <option value="kling-v2-6">Kling v2.6 (with Audio)</option>
+                                <option value="kling-v3-0">Kling 3.0 (Beta — may require API update)</option>
                             </select>
                         </div>
 
@@ -172,20 +181,30 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                         <div>
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Duration</label>
                             <div className="flex bg-white p-1 rounded-lg border border-purple-200">
-                                <button
-                                    onClick={() => setKlingDuration('5')}
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${klingDuration === '5' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    5 seconds
-                                </button>
-                                <button
-                                    onClick={() => setKlingDuration('10')}
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${klingDuration === '10' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    10 seconds
-                                </button>
+                                {(['3', '5', '10', '15'] as KlingDuration[]).map(d => (
+                                    <button
+                                        key={d}
+                                        onClick={() => setKlingDuration(d)}
+                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${klingDuration === d ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        {d}s
+                                    </button>
+                                ))}
                             </div>
                         </div>
+
+                        {/* Native Audio Toggle (Kling 3.0 only) */}
+                        {(klingModel === 'kling-v3-0' || klingModel === 'kling-v2-6') && (
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Native Audio</label>
+                                <button
+                                    onClick={() => setKlingWithAudio(!klingWithAudio)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${klingWithAudio ? 'bg-purple-600' : 'bg-gray-300'}`}
+                                >
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${klingWithAudio ? 'translate-x-5' : ''}`} />
+                                </button>
+                            </div>
+                        )}
 
                         {/* Camera Control */}
                         <div>
@@ -295,6 +314,21 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                         <input type="file" accept="video/*" className="hidden" onChange={e => setReferenceVideo(e.target.files?.[0] || null)} />
                                     </label>
                                 </div>
+
+                                {/* Generate Prompt from Reference Button */}
+                                {referenceVideo && onGeneratePromptFromRef && (
+                                    <button
+                                        onClick={onGeneratePromptFromRef}
+                                        disabled={isAnalyzingRef}
+                                        className="w-full mt-3 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-md transition-all transform active:scale-[0.98]"
+                                    >
+                                        {isAnalyzingRef ? (
+                                            <><Spinner /> Analyzing Video...</>
+                                        ) : (
+                                            <>✨ Generate Prompt from Reference</>
+                                        )}
+                                    </button>
+                                )}
                             </div>
 
                             <div>

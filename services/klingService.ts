@@ -4,7 +4,7 @@
  * Handles video generation and extension via Kling AI's REST API.
  * Uses JWT authentication signed with Web Crypto API (HMAC-SHA256).
  */
-import type { FashionCategory, KlingCameraControl } from '../types';
+import type { FashionCategory, KlingCameraControl, KlingDuration } from '../types';
 
 // --- Config ---
 const KLING_API_BASE = '/api/kling';
@@ -205,11 +205,12 @@ const pollTask = async (
 // --- Public API ---
 
 export interface KlingVideoConfig {
-    model?: string;          // 'kling-v2-1' | 'kling-v2-6' etc.
+    model?: string;          // 'kling-v3-0' | 'kling-v2-1'
     mode?: 'std' | 'pro';
-    duration?: '5' | '10';
+    duration?: KlingDuration; // '3' | '5' | '10' | '15'
     aspectRatio?: string;    // '16:9' | '9:16' | '1:1'
     cameraControl?: KlingCameraControl | null;
+    withAudio?: boolean;     // Kling 3.0 native audio generation
 }
 
 /**
@@ -253,13 +254,18 @@ export const generateKlingVideo = async (
 
     // Build request body
     const body: any = {
-        model_name: config.model || 'kling-v2-1',
+        model_name: config.model || 'kling-v3-0',
         mode: config.mode || 'pro',
         duration: config.duration || '5',
         aspect_ratio: config.aspectRatio || '9:16',
         prompt: fullPrompt,
         image: base64Data,
     };
+
+    // Add native audio if enabled (Kling 3.0 feature)
+    if (config.withAudio) {
+        body.with_audio = true;
+    }
 
     // Add camera control if specified
     if (config.cameraControl) {
@@ -303,6 +309,7 @@ export const generateKlingVideo = async (
 export const extendKlingVideo = async (
     previousTaskId: string,
     prompt: string,
+    config: KlingVideoConfig = {},
     onStatusUpdate?: (status: string) => void
 ): Promise<{ url: string; taskId: string }> => {
     if (!isKlingAvailable()) {
@@ -311,12 +318,16 @@ export const extendKlingVideo = async (
 
     onStatusUpdate?.('Submitting extension to Kling AI...');
 
-    const body = {
-        model_name: 'kling-v2-1',
-        mode: 'pro',
+    const body: any = {
+        model_name: config.model || 'kling-v3-0',
+        mode: config.mode || 'pro',
         prompt: `Continue smoothly: ${prompt}`,
         task_id: previousTaskId
     };
+
+    if (config.withAudio) {
+        body.with_audio = true;
+    }
 
     const createResult = await klingFetch('/videos/extend', {
         method: 'POST',
