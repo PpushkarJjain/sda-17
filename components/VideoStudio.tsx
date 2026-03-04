@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ImageUploadSlot from './ImageUploadSlot';
-import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl } from '../types';
+import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration, VideoPromptSegment } from '../types';
 import VideoControls, { categoryTemplates, VideoTemplate } from './VideoControls';
 import { analyzeReferenceVideo, generateFashionVideo, extendFashionVideo } from '../services/geminiService';
 import { generateKlingVideo, extendKlingVideo, isKlingAvailable, type KlingVideoConfig } from '../services/klingService';
@@ -31,9 +31,16 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
 
     // Provider State
     const [videoProvider, setVideoProvider] = useState<VideoProvider>('gemini');
-    const [klingModel, setKlingModel] = useState('kling-v2-1');
-    const [klingDuration, setKlingDuration] = useState<'5' | '10'>('5');
+    const [klingModel, setKlingModel] = useState('kling-v2-6');
+    const [klingDuration, setKlingDuration] = useState<KlingDuration>('5');
     const [klingCameraControl, setKlingCameraControl] = useState<KlingCameraControl | null>(null);
+    const [klingWithAudio, setKlingWithAudio] = useState(false);
+    const [klingMotionControlEnabled, setKlingMotionControlEnabled] = useState(false);
+    const [klingCharacterOrientation, setKlingCharacterOrientation] = useState<'image' | 'video'>('image');
+
+    // Reference Prompt Generation State
+    const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
+    const [refPromptSegments, setRefPromptSegments] = useState<VideoPromptSegment[]>([]);
 
     // Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -43,6 +50,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [currentVideoResource, setCurrentVideoResource] = useState<any | null>(null);
     const [currentVideoProvider, setCurrentVideoProvider] = useState<VideoProvider>('gemini');
     const [currentKlingTaskId, setCurrentKlingTaskId] = useState<string | null>(null);
+    const [currentKlingVideoId, setCurrentKlingVideoId] = useState<string | null>(null);
+    const [currentKlingModel, setCurrentKlingModel] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     // Extension UI State
@@ -50,7 +59,11 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [extensionPrompt, setExtensionPrompt] = useState('');
 
     // History State
-    const [history, setHistory] = useState<{ url: string, resource?: any, klingTaskId?: string, provider: VideoProvider, timestamp: number, name: string }[]>([]);
+    const [history, setHistory] = useState<{ url: string, resource?: any, klingTaskId?: string, klingVideoId?: string, klingModelUsed?: string, provider: VideoProvider, timestamp: number, name: string }[]>([]);
+
+    // Extension support: only Kling v1.0 and Omni/v3 support extension. v1.5/v1.6/v2.x do NOT.
+    // Since we don't offer v1.0 and v3/Omni isn't available on the direct API yet, extension is currently Gemini-only.
+    const canExtendKling = false;
 
     // Update selected template when category changes to avoid invalid template
     useEffect(() => {
@@ -85,9 +98,15 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     finalPrompt += `. ${templateCustomPrompt.trim()}`;
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                setStatus("Analyzing Reference Video...");
-                const analysis = await analyzeReferenceVideo(referenceVideo);
-                finalPrompt = analysis;
+                // Use the first segment prompt if already analyzed, otherwise analyze now
+                if (refPromptSegments.length > 0) {
+                    finalPrompt = refPromptSegments[0].prompt;
+                } else {
+                    setStatus("Analyzing Reference Video...");
+                    const segments = await analyzeReferenceVideo(referenceVideo);
+                    setRefPromptSegments(segments);
+                    finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
+                }
                 if (referenceAdditionalDetails.trim()) {
                     finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
                 }
@@ -108,16 +127,40 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     duration: klingDuration,
                     aspectRatio: '9:16',
                     cameraControl: klingCameraControl,
+                    withAudio: klingWithAudio,
                 };
+
+                // Motion Control: send reference video directly to Kling
+                if (activeTab === 'reference' && referenceVideo && klingMotionControlEnabled) {
+                    setStatus('Preparing reference video for motion control...');
+                    const videoReader = new FileReader();
+                    videoReader.readAsDataURL(referenceVideo);
+                    const videoDataUrl = await new Promise<string>((resolve) => {
+                        videoReader.onload = () => resolve(videoReader.result as string);
+                    });
+                    klingConfig.motionControl = {
+                        videoDataUrl,
+                        characterOrientation: klingCharacterOrientation,
+                    };
+                    // Use a minimal prompt when motion control is active (video drives the motion)
+                    if (!finalPrompt.trim()) {
+                        finalPrompt = 'Fashion model performing motion from reference video.';
+                    }
+                }
+
                 const result = await generateKlingVideo(category, finalPrompt, base64Image, klingConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
                 setCurrentVideoResource(null);
                 setCurrentKlingTaskId(result.taskId);
+                setCurrentKlingVideoId(result.videoId);
+                setCurrentKlingModel(klingModel);
                 setCurrentVideoProvider('kling');
 
                 const newEntry = {
                     url: result.url,
                     klingTaskId: result.taskId,
+                    klingVideoId: result.videoId,
+                    klingModelUsed: klingModel,
                     provider: 'kling' as VideoProvider,
                     timestamp: Date.now(),
                     name: `[Kling] ${activeTab === 'template' ? selectedTemplate.name : 'Custom Reference Video'}`
@@ -159,16 +202,25 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         setStatus("Starting Extension...");
 
         try {
-            if (currentVideoProvider === 'kling' && currentKlingTaskId) {
+            if (currentVideoProvider === 'kling' && currentKlingVideoId) {
                 // --- Kling extension ---
-                const result = await extendKlingVideo(currentKlingTaskId, direction, (s) => setStatus(s));
+                const klingExtendConfig: KlingVideoConfig = {
+                    model: klingModel,
+                    mode: 'pro',
+                    withAudio: klingWithAudio,
+                };
+                const result = await extendKlingVideo(currentKlingVideoId, direction, klingExtendConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
                 setCurrentKlingTaskId(result.taskId);
+                setCurrentKlingVideoId(result.videoId);
+                setCurrentKlingModel(klingModel);
                 setExtensionPrompt('');
 
                 const newEntry = {
                     url: result.url,
                     klingTaskId: result.taskId,
+                    klingVideoId: result.videoId,
+                    klingModelUsed: klingModel,
                     provider: 'kling' as VideoProvider,
                     timestamp: Date.now(),
                     name: `[Kling] Extended: ${activeTab === 'template' ? selectedTemplate.name : 'Custom Video'}`
@@ -202,17 +254,37 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
         }
     };
 
-    const handleSelectHistory = (item: { url: string, resource?: any, klingTaskId?: string, provider: VideoProvider }) => {
+    const handleSelectHistory = (item: { url: string, resource?: any, klingTaskId?: string, klingVideoId?: string, klingModelUsed?: string, provider: VideoProvider }) => {
         setCurrentVideoUrl(item.url);
         setCurrentVideoResource(item.resource || null);
         setCurrentKlingTaskId(item.klingTaskId || null);
+        setCurrentKlingVideoId(item.klingVideoId || null);
+        setCurrentKlingModel(item.klingModelUsed || null);
         setCurrentVideoProvider(item.provider);
         setShowExtendInput(false);
         setError(null);
     };
 
+    const handleGeneratePromptFromRef = async () => {
+        if (!referenceVideo) return;
+        setIsAnalyzingRef(true);
+        setRefPromptSegments([]);
+        try {
+            const segments = await analyzeReferenceVideo(referenceVideo);
+            setRefPromptSegments(segments);
+            // Auto-fill the additional details with the first segment for immediate use
+            if (segments.length > 0) {
+                setReferenceAdditionalDetails(segments[0].prompt);
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to analyze reference video.');
+        } finally {
+            setIsAnalyzingRef(false);
+        }
+    };
+
     return (
-        <div className="max-w-7xl mx-auto px-0 md:px-4 lg:px-6">
+        <div className="max-w-[1600px] mx-auto px-0 md:px-4 lg:px-6">
 
             {/* Mobile Header Context */}
             <div className="lg:hidden px-4 mb-6">
@@ -222,10 +294,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 <p className="text-gray-500 text-sm mt-1">Transform static photos into cinematic videos.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8 items-start">
 
                 {/* Left Column: Input & Controls (Sticky on Desktop, Scroll on Mobile) */}
-                <div className="lg:col-span-1 xl:col-span-1 flex flex-col gap-6 lg:sticky lg:top-24 lg:z-10 lg:h-[calc(100vh-8rem)]">
+                <div className="lg:col-span-2 flex flex-col gap-6">
 
                     {/* 0. Category Selector */}
                     {onCategoryChange && (
@@ -273,7 +345,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     </div>
 
                     {/* 2. Video Controls */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-rose-100 overflow-hidden flex flex-col flex-grow min-h-0 lg:min-h-0 mx-4 lg:mx-0">
+                    <div className="bg-white rounded-2xl shadow-sm border border-rose-100 overflow-hidden flex flex-col mx-4 lg:mx-0">
                         <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex-shrink-0">
                             <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm uppercase tracking-wider">
                                 <span className="bg-rose-100 text-rose-600 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
@@ -286,7 +358,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                         Desktop: h-full to fill the sticky sidebar container. 
                      */}
                         <VideoControls
-                            className="h-auto lg:h-full"
+                            className=""
                             category={category}
                             activeTab={activeTab}
                             setActiveTab={setActiveTab}
@@ -310,15 +382,24 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setKlingDuration={setKlingDuration}
                             klingCameraControl={klingCameraControl}
                             setKlingCameraControl={setKlingCameraControl}
+                            klingWithAudio={klingWithAudio}
+                            setKlingWithAudio={setKlingWithAudio}
+                            onGeneratePromptFromRef={handleGeneratePromptFromRef}
+                            isAnalyzingRef={isAnalyzingRef}
+                            refPromptSegments={refPromptSegments}
+                            klingMotionControlEnabled={klingMotionControlEnabled}
+                            setKlingMotionControlEnabled={setKlingMotionControlEnabled}
+                            klingCharacterOrientation={klingCharacterOrientation}
+                            setKlingCharacterOrientation={setKlingCharacterOrientation}
                         />
                     </div>
                 </div>
 
                 {/* Right Column: Preview & Output */}
-                <div className="lg:col-span-2 xl:col-span-3 flex flex-col gap-6 px-4 lg:px-0">
+                <div className="lg:col-span-3 flex flex-col gap-6 px-4 lg:px-0 lg:sticky lg:top-24 lg:self-start">
 
                     {/* Main Preview Player Stage */}
-                    <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative flex flex-col min-h-[400px] sm:min-h-[500px] lg:h-[650px]">
+                    <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative flex flex-col min-h-[400px] sm:min-h-[500px] lg:h-[600px]">
 
                         {/* Player Header / Toolbar */}
                         <div className="bg-gray-800/80 backdrop-blur-md px-4 py-3 flex flex-wrap gap-2 justify-between items-center border-b border-white/5 z-20">
@@ -328,8 +409,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                 <span className="text-sm font-semibold tracking-wide sm:hidden">Preview</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                {/* Extend Button */}
-                                {currentVideoUrl && (currentVideoResource || currentKlingTaskId) && !showExtendInput && (
+                                {/* Extend Button — Gemini or v1.x Kling only */}
+                                {currentVideoUrl && (currentVideoResource || canExtendKling) && !showExtendInput && (
                                     <button
                                         onClick={() => { setShowExtendInput(true); setError(null); }}
                                         disabled={isExtending}
@@ -339,6 +420,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                         <span className="hidden sm:inline">Extend Scene (+5s)</span>
                                         <span className="sm:hidden">Extend</span>
                                     </button>
+                                )}
+                                {/* Extension not supported tip for Kling */}
+                                {currentVideoUrl && currentVideoProvider === 'kling' && !showExtendInput && (
+                                    <span className="text-[10px] text-amber-400 bg-amber-900/30 px-3 py-1.5 rounded-lg cursor-help" title="Kling v2.x doesn't support extension. Only v1.0 and Omni/v3 do. Generate longer initial videos (10s) instead.">
+                                        💡 Tip: Use 10s duration
+                                    </span>
                                 )}
                                 {currentVideoUrl && (
                                     <a

@@ -1,5 +1,12 @@
 export type FashionCategory = 'saree' | 'kurti' | 'jewelry' | 'lehenga';
 export type VideoProvider = 'gemini' | 'kling';
+export type KlingDuration = '3' | '5' | '10' | '15';
+
+export interface VideoPromptSegment {
+  label: string;        // e.g. "First 5 Seconds", "Extension 1 (+5s)"
+  prompt: string;       // Actionable generation/extension prompt
+  cameraAction: string; // Camera movement hint
+}
 
 export interface KlingCameraControl {
   type: 'simple';

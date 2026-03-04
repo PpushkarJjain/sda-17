@@ -913,7 +913,7 @@ export const generateVariation = async (
   return refineGeneratedImage(base64Data, 'image/jpeg', config.sareeEditPrompt);
 };
 
-export const analyzeReferenceVideo = async (videoFile: File): Promise<string> => {
+export const analyzeReferenceVideo = async (videoFile: File): Promise<import('../types').VideoPromptSegment[]> => {
   const apiKey = getActiveApiKey();
   const ai = new GoogleGenAI({ apiKey });
   const reader = new FileReader();
@@ -921,12 +921,71 @@ export const analyzeReferenceVideo = async (videoFile: File): Promise<string> =>
     reader.readAsDataURL(videoFile);
     reader.onload = () => resolve((reader.result as string).split(',')[1]);
   });
+
+  const systemPrompt = `You are a Kling AI video prompt specialist. Analyze this reference video and generate optimized prompts for Kling AI's image-to-video model.
+
+CRITICAL — Kling AI prompt rules:
+1. Use SUBJECT-VERB-ACTION structure: "Woman turns slowly to the right, silk fabric flows behind her"
+2. Keep each prompt under 40 words — Kling ignores long prompts
+3. Describe PHYSICAL MOTION explicitly: "walks forward", "lifts arm", "turns head left", "fabric billows"
+4. NO abstract/poetic language — Kling needs literal movement descriptions
+5. NO color grading or mood words — Kling determines these from the source image
+6. For extensions: start with the exact motion state where the previous segment ended
+7. Include texture/material behavior: "silk catches light", "pleats swing", "jewelry reflects"
+
+CAMERA ANALYSIS — THIS IS CRITICAL:
+- You MUST carefully analyze the ACTUAL camera movement in each segment of the video
+- NEVER default to "static shot" unless the camera is truly 100% locked and motionless
+- Most fashion/product videos have subtle camera motion — detect it!
+- Choose the MOST SPECIFIC camera instruction from this list:
+  [slow zoom in], [slow zoom out], [push in], [pull back],
+  [dolly left], [dolly right], [dolly forward], [dolly backward],
+  [pan left to right], [pan right to left], [tilt up], [tilt down],
+  [orbit clockwise], [orbit counter-clockwise], [crane up], [crane down],
+  [handheld slight movement], [tracking shot following subject]
+- If the camera has even slight movement, pick the closest match — do NOT say "static"
+
+BAD example: cameraAction: "[static shot]" (lazy default — almost never correct)
+GOOD example: cameraAction: "[slow zoom in]" or "[dolly backward]" or "[pan left to right]"
+
+Segment the video into 5-second chunks. Output ONLY a valid JSON array:
+[
+  {"label":"First 5 Seconds","prompt":"...","cameraAction":"[specific camera movement]"},
+  {"label":"Extension 1 (+5s)","prompt":"...","cameraAction":"[specific camera movement]"}
+]
+
+If video is under 10s, output 1-2 segments only.`;
+
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: "Analyze video motion." }, { inlineData: { data: videoBase64, mimeType: videoFile.type } }] }]
+      model: 'gemini-2.5-flash',
+      contents: [{ parts: [{ text: systemPrompt }, { inlineData: { data: videoBase64, mimeType: videoFile.type } }] }]
     });
-    return response.text || "Cinematic motion.";
+
+    const rawText = (response.text || '').trim();
+
+    // Try to parse JSON from the response
+    try {
+      // Strip markdown code fences if present
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].prompt) {
+        return parsed.map((seg: any, i: number) => ({
+          label: seg.label || (i === 0 ? 'First 5 Seconds' : `Extension ${i} (+5s)`),
+          prompt: seg.prompt || '',
+          cameraAction: seg.cameraAction || seg.camera_action || 'Not specified'
+        }));
+      }
+    } catch {
+      // JSON parse failed — fall through to fallback
+    }
+
+    // Fallback: wrap plain text as a single segment
+    return [{
+      label: 'First 5 Seconds',
+      prompt: rawText || 'Cinematic fashion showcase with smooth motion.',
+      cameraAction: 'Smooth tracking shot'
+    }];
   } catch (error) {
     return handleApiError(error);
   }
