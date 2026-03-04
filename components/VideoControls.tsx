@@ -57,18 +57,18 @@ interface VideoControlsProps {
     additionalDetails: string;
     setAdditionalDetails: (s: string) => void;
     className?: string;
-    // Provider selection
-    videoProvider: VideoProvider;
-    setVideoProvider: (p: VideoProvider) => void;
-    // Kling-specific config
-    klingModel: string;
-    setKlingModel: (m: string) => void;
-    klingDuration: KlingDuration;
-    setKlingDuration: (d: KlingDuration) => void;
-    klingCameraControl: KlingCameraControl | null;
-    setKlingCameraControl: (c: KlingCameraControl | null) => void;
-    klingWithAudio: boolean;
-    setKlingWithAudio: (a: boolean) => void;
+    // Provider selection (optional — only used in VideoStudio, not VideoModal)
+    videoProvider?: VideoProvider;
+    setVideoProvider?: (p: VideoProvider) => void;
+    // Kling-specific config (optional — only used when Kling provider is active)
+    klingModel?: string;
+    setKlingModel?: (m: string) => void;
+    klingDuration?: KlingDuration;
+    setKlingDuration?: (d: KlingDuration) => void;
+    klingCameraControl?: KlingCameraControl | null;
+    setKlingCameraControl?: (c: KlingCameraControl | null) => void;
+    klingWithAudio?: boolean;
+    setKlingWithAudio?: (a: boolean) => void;
     // Reference video prompt generation
     onGeneratePromptFromRef?: () => void;
     isAnalyzingRef?: boolean;
