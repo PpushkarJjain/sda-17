@@ -35,6 +35,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [klingDuration, setKlingDuration] = useState<KlingDuration>('5');
     const [klingCameraControl, setKlingCameraControl] = useState<KlingCameraControl | null>(null);
     const [klingWithAudio, setKlingWithAudio] = useState(false);
+    const [klingMotionControlEnabled, setKlingMotionControlEnabled] = useState(false);
+    const [klingCharacterOrientation, setKlingCharacterOrientation] = useState<'image' | 'video'>('image');
 
     // Reference Prompt Generation State
     const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
@@ -127,6 +129,25 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     cameraControl: klingCameraControl,
                     withAudio: klingWithAudio,
                 };
+
+                // Motion Control: send reference video directly to Kling
+                if (activeTab === 'reference' && referenceVideo && klingMotionControlEnabled) {
+                    setStatus('Preparing reference video for motion control...');
+                    const videoReader = new FileReader();
+                    videoReader.readAsDataURL(referenceVideo);
+                    const videoDataUrl = await new Promise<string>((resolve) => {
+                        videoReader.onload = () => resolve(videoReader.result as string);
+                    });
+                    klingConfig.motionControl = {
+                        videoDataUrl,
+                        characterOrientation: klingCharacterOrientation,
+                    };
+                    // Use a minimal prompt when motion control is active (video drives the motion)
+                    if (!finalPrompt.trim()) {
+                        finalPrompt = 'Fashion model performing motion from reference video.';
+                    }
+                }
+
                 const result = await generateKlingVideo(category, finalPrompt, base64Image, klingConfig, (s) => setStatus(s));
                 setCurrentVideoUrl(result.url);
                 setCurrentVideoResource(null);
@@ -366,6 +387,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             onGeneratePromptFromRef={handleGeneratePromptFromRef}
                             isAnalyzingRef={isAnalyzingRef}
                             refPromptSegments={refPromptSegments}
+                            klingMotionControlEnabled={klingMotionControlEnabled}
+                            setKlingMotionControlEnabled={setKlingMotionControlEnabled}
+                            klingCharacterOrientation={klingCharacterOrientation}
+                            setKlingCharacterOrientation={setKlingCharacterOrientation}
                         />
                     </div>
                 </div>

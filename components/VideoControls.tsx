@@ -73,6 +73,11 @@ interface VideoControlsProps {
     onGeneratePromptFromRef?: () => void;
     isAnalyzingRef?: boolean;
     refPromptSegments?: VideoPromptSegment[];
+    // Kling Motion Control
+    klingMotionControlEnabled?: boolean;
+    setKlingMotionControlEnabled?: (enabled: boolean) => void;
+    klingCharacterOrientation?: 'image' | 'video';
+    setKlingCharacterOrientation?: (o: 'image' | 'video') => void;
 }
 
 const CAMERA_PRESETS = [
@@ -129,6 +134,10 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     onGeneratePromptFromRef,
     isAnalyzingRef,
     refPromptSegments,
+    klingMotionControlEnabled,
+    setKlingMotionControlEnabled,
+    klingCharacterOrientation,
+    setKlingCharacterOrientation,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -209,41 +218,96 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                             </div>
                         )}
 
-                        {/* Camera Control */}
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Camera Movement</label>
-                            <select
-                                value={cameraPreset}
-                                onChange={e => {
-                                    const newPreset = e.target.value;
-                                    setCameraPreset(newPreset);
-                                    setKlingCameraControl(cameraPresetToControl(newPreset, cameraIntensity));
-                                }}
-                                className="w-full px-3 py-2 text-sm bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
-                            >
-                                {CAMERA_PRESETS.map(p => (
-                                    <option key={p.value} value={p.value}>{p.label}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* Camera Control — hidden when Motion Control is active */}
+                        {!klingMotionControlEnabled && (
+                            <>
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Camera Movement</label>
+                                    <select
+                                        value={cameraPreset}
+                                        onChange={e => {
+                                            const newPreset = e.target.value;
+                                            setCameraPreset(newPreset);
+                                            setKlingCameraControl(cameraPresetToControl(newPreset, cameraIntensity));
+                                        }}
+                                        className="w-full px-3 py-2 text-sm bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+                                    >
+                                        {CAMERA_PRESETS.map(p => (
+                                            <option key={p.value} value={p.value}>{p.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        {/* Intensity Slider (only when camera preset is not 'none') */}
-                        {cameraPreset !== 'none' && (
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                                    Intensity: <span className="text-purple-600">{cameraIntensity}/10</span>
-                                </label>
-                                <input
-                                    type="range"
-                                    min="1" max="10" step="1"
-                                    value={cameraIntensity}
-                                    onChange={e => {
-                                        const val = parseInt(e.target.value);
-                                        setCameraIntensity(val);
-                                        setKlingCameraControl(cameraPresetToControl(cameraPreset, val));
-                                    }}
-                                    className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                                />
+                                {/* Intensity Slider (only when camera preset is not 'none') */}
+                                {cameraPreset !== 'none' && (
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                                            Intensity: <span className="text-purple-600">{cameraIntensity}/10</span>
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="1" max="10" step="1"
+                                            value={cameraIntensity}
+                                            onChange={e => {
+                                                const val = parseInt(e.target.value);
+                                                setCameraIntensity(val);
+                                                setKlingCameraControl(cameraPresetToControl(cameraPreset, val));
+                                            }}
+                                            className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Motion Control — visible when Reference tab active + video uploaded + Kling provider */}
+                        {activeTab === 'reference' && referenceVideo && setKlingMotionControlEnabled && (
+                            <div className="space-y-3 p-3 bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-200 rounded-xl">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">🎬 Motion Control</label>
+                                        <p className="text-[9px] text-gray-500 mt-0.5">Transfer motion from reference video to character</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setKlingMotionControlEnabled(!klingMotionControlEnabled)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${klingMotionControlEnabled ? 'bg-violet-600' : 'bg-gray-300'}`}
+                                    >
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${klingMotionControlEnabled ? 'translate-x-5' : ''}`} />
+                                    </button>
+                                </div>
+
+                                {klingMotionControlEnabled && setKlingCharacterOrientation && (
+                                    <>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Character Orientation</label>
+                                            <div className="flex bg-white p-1 rounded-lg border border-purple-200">
+                                                <button
+                                                    onClick={() => setKlingCharacterOrientation('image')}
+                                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${klingCharacterOrientation === 'image' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                >
+                                                    📷 Image (≤10s)
+                                                </button>
+                                                <button
+                                                    onClick={() => setKlingCharacterOrientation('video')}
+                                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${klingCharacterOrientation === 'video' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                >
+                                                    🎥 Video (≤30s)
+                                                </button>
+                                            </div>
+                                            <p className="text-[9px] text-gray-400 mt-1 italic">
+                                                {klingCharacterOrientation === 'image'
+                                                    ? '"Image" keeps your character\'s orientation from the source image. Video ≤ 10 seconds.'
+                                                    : '"Video" follows the character\'s orientation in the reference video. Video ≤ 30 seconds.'
+                                                }
+                                            </p>
+                                        </div>
+
+                                        <div className="p-2 bg-violet-100 border border-violet-200 rounded-lg text-[10px] text-violet-800 leading-relaxed flex gap-2">
+                                            <span className="text-sm">🎯</span>
+                                            <span>Reference video motion will be directly applied to your character. Camera controls are disabled in this mode.</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>

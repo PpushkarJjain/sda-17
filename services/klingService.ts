@@ -211,6 +211,10 @@ export interface KlingVideoConfig {
     aspectRatio?: string;    // '16:9' | '9:16' | '1:1'
     cameraControl?: KlingCameraControl | null;
     withAudio?: boolean;     // Kling 3.0 native audio generation
+    motionControl?: {        // Kling 2.6 Motion Control (dynamic_poses)
+        videoDataUrl: string;                     // data URI of the reference video
+        characterOrientation: 'image' | 'video';  // match image orientation (≤10s) or video orientation (≤30s)
+    } | null;
 }
 
 /**
@@ -267,8 +271,15 @@ export const generateKlingVideo = async (
         body.with_audio = true;
     }
 
-    // Add camera control if specified
-    if (config.cameraControl) {
+    // Add Motion Control (dynamic_poses) if specified — mutually exclusive with camera_control
+    if (config.motionControl) {
+        body.dynamic_poses = [{
+            video_url: config.motionControl.videoDataUrl,
+            character_orientation: config.motionControl.characterOrientation,
+        }];
+        // camera_control and dynamic_poses are mutually exclusive
+    } else if (config.cameraControl) {
+        // Add camera control if specified (only when NOT using motion control)
         body.camera_control = config.cameraControl;
     }
 
