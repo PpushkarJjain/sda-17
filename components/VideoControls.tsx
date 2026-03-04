@@ -150,7 +150,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
         <div className={`flex flex-col bg-gray-50 ${className}`}>
             <div className="p-4 sm:p-5 space-y-6 flex-grow">
                 {/* Video Provider Selector */}
-                {klingAvailable && (
+                {klingAvailable && setVideoProvider && (
                     <div className="flex-shrink-0">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Video Provider</label>
                         <div className="flex bg-gray-200 p-1 rounded-xl shadow-inner">
@@ -171,7 +171,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                 )}
 
                 {/* Kling-Specific Controls */}
-                {videoProvider === 'kling' && (
+                {videoProvider === 'kling' && setVideoProvider && (
                     <div className="space-y-4 p-4 bg-purple-50 border border-purple-200 rounded-xl animate-in fade-in slide-in-from-top-2">
                         <h4 className="text-[10px] font-black text-purple-500 uppercase tracking-widest">Kling AI Settings</h4>
 
