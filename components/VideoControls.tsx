@@ -404,20 +404,20 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                             )}
 
                             <div>
-                                <label htmlFor="additional-details" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Additional Details (Optional)</label>
+                                <label htmlFor="additional-details" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Video Prompt</label>
                                 <textarea
                                     id="additional-details"
                                     value={additionalDetails}
                                     onChange={(e) => setAdditionalDetails(e.target.value)}
-                                    placeholder="e.g. Keep the lighting dark and moody, ensure the background is blurry..."
+                                    placeholder="Describe the motion, camera work, and style you want. You can paste from the generated prompt above and edit it."
                                     className="w-full p-3 bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm h-24 resize-none shadow-sm transition-shadow"
                                 />
-                                <p className="text-[10px] text-gray-400 mt-1 italic">Used to guide style alongside the video motion analysis.</p>
+                                <p className="text-[10px] text-gray-400 mt-1 italic">This is the prompt sent to the AI. Copy from the generated prompt above if needed, or write your own.</p>
                             </div>
 
                             <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800 leading-relaxed flex gap-2">
                                 <span className="text-xl">💡</span>
-                                <span><strong>AI Tip:</strong> Ensure your reference video has clear lighting and a steady camera for best results.</span>
+                                <span><strong>Tip:</strong> Use "Generate Prompt from Reference" to get AI-suggested prompts, then copy & paste what you like into the Video Prompt box above.</span>
                             </div>
                         </div>
                     )}

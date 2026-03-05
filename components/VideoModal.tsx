@@ -60,12 +60,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
                     finalPrompt += `. ${templateCustomPrompt.trim()}`;
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                setStatus("Analyzing Reference Video...");
-                const segments = await analyzeReferenceVideo(referenceVideo);
-                finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
-                if (referenceAdditionalDetails.trim()) {
-                    finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
-                }
+                // Use only the user's manual prompt input (Video Prompt)
+                finalPrompt = referenceAdditionalDetails.trim() || 'Cinematic fashion showcase with natural movement.';
             }
 
             const result = await generateFashionVideo(category as 'saree' | 'kurti' | 'jewelry', finalPrompt, startingImage, (s) => setStatus(s));

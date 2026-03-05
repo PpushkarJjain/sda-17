@@ -283,6 +283,18 @@ export const generateKlingVideo = async (
         body.camera_control = config.cameraControl;
     }
 
+    // Debug: Log request body details (without full base64 data)
+    const debugBody = { ...body };
+    if (debugBody.image) debugBody.image = `[base64 image, ${debugBody.image.length} chars]`;
+    if (debugBody.dynamic_poses) {
+        debugBody.dynamic_poses = debugBody.dynamic_poses.map((dp: any) => ({
+            ...dp,
+            video_url: `[${dp.video_url?.substring(0, 30)}..., ${dp.video_url?.length} chars total]`,
+        }));
+    }
+    console.log('[Kling Generate] Request body keys:', Object.keys(body));
+    console.log('[Kling Generate] Request body (sanitized):', JSON.stringify(debugBody, null, 2));
+
     // Create task
     const createResult = await klingFetch('/videos/image2video', {
         method: 'POST',

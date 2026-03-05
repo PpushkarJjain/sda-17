@@ -98,18 +98,9 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     finalPrompt += `. ${templateCustomPrompt.trim()}`;
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                // Use the first segment prompt if already analyzed, otherwise analyze now
-                if (refPromptSegments.length > 0) {
-                    finalPrompt = refPromptSegments[0].prompt;
-                } else {
-                    setStatus("Analyzing Reference Video...");
-                    const segments = await analyzeReferenceVideo(referenceVideo);
-                    setRefPromptSegments(segments);
-                    finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
-                }
-                if (referenceAdditionalDetails.trim()) {
-                    finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
-                }
+                // Use only the user's manual prompt input (Additional Details / Video Prompt)
+                // The "Generate Prompt from Reference" feature is a copy-only helper — not auto-fed
+                finalPrompt = referenceAdditionalDetails.trim() || 'Cinematic fashion showcase with natural movement.';
             }
 
             // Convert source image to base64
