@@ -3,7 +3,7 @@ import ImageUploadSlot from './ImageUploadSlot';
 import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration, VideoPromptSegment } from '../types';
 import VideoControls, { categoryTemplates, VideoTemplate } from './VideoControls';
 import { analyzeReferenceVideo, generateFashionVideo, extendFashionVideo } from '../services/geminiService';
-import { generateKlingVideo, extendKlingVideo, isKlingAvailable, type KlingVideoConfig } from '../services/klingService';
+import { generateKlingVideo, extendKlingVideo, isKlingAvailable, uploadVideoToTempHost, type KlingVideoConfig } from '../services/klingService';
 import { FilmIcon } from './icons/FilmIcon';
 import { PlayIcon } from './icons/PlayIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
@@ -37,6 +37,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [klingWithAudio, setKlingWithAudio] = useState(false);
     const [klingMotionControlEnabled, setKlingMotionControlEnabled] = useState(false);
     const [klingCharacterOrientation, setKlingCharacterOrientation] = useState<'image' | 'video'>('image');
+    const [motionVideoSource, setMotionVideoSource] = useState<'auto' | 'url'>('auto');
+    const [motionVideoUrl, setMotionVideoUrl] = useState('');
 
     // Reference Prompt Generation State
     const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
@@ -121,16 +123,21 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     withAudio: klingWithAudio,
                 };
 
-                // Motion Control: send reference video directly to Kling
+                // Motion Control: upload reference video to get a public URL for Kling
                 if (activeTab === 'reference' && referenceVideo && klingMotionControlEnabled) {
-                    setStatus('Preparing reference video for motion control...');
-                    const videoReader = new FileReader();
-                    videoReader.readAsDataURL(referenceVideo);
-                    const videoDataUrl = await new Promise<string>((resolve) => {
-                        videoReader.onload = () => resolve(videoReader.result as string);
-                    });
+                    let videoUrl: string;
+
+                    if (motionVideoSource === 'url' && motionVideoUrl.trim()) {
+                        // User-provided URL
+                        videoUrl = motionVideoUrl.trim();
+                        setStatus('Using provided video URL for motion control...');
+                    } else {
+                        // Auto-upload to temporary host
+                        videoUrl = await uploadVideoToTempHost(referenceVideo, (s) => setStatus(s));
+                    }
+
                     klingConfig.motionControl = {
-                        videoDataUrl,
+                        videoUrl,
                         characterOrientation: klingCharacterOrientation,
                     };
                     // Use a minimal prompt when motion control is active (video drives the motion)
@@ -382,6 +389,10 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setKlingMotionControlEnabled={setKlingMotionControlEnabled}
                             klingCharacterOrientation={klingCharacterOrientation}
                             setKlingCharacterOrientation={setKlingCharacterOrientation}
+                            motionVideoSource={motionVideoSource}
+                            setMotionVideoSource={setMotionVideoSource}
+                            motionVideoUrl={motionVideoUrl}
+                            setMotionVideoUrl={setMotionVideoUrl}
                         />
                     </div>
                 </div>

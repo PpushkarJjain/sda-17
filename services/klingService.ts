@@ -202,6 +202,49 @@ const pollTask = async (
     throw new Error('Kling video generation timed out after 10 minutes.');
 };
 
+// --- Video Upload for Motion Control ---
+
+/**
+ * Upload a video file to a temporary hosting service (tmpfiles.org)
+ * and return a publicly accessible HTTPS URL.
+ * Kling's dynamic_poses.video_url requires an HTTPS URL — data URIs are silently ignored.
+ */
+export const uploadVideoToTempHost = async (
+    videoFile: File,
+    onStatusUpdate?: (status: string) => void
+): Promise<string> => {
+    onStatusUpdate?.('Uploading reference video to temporary host...');
+
+    const formData = new FormData();
+    formData.append('file', videoFile);
+
+    const response = await fetch('https://tmpfiles.org/api/v1/upload', {
+        method: 'POST',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to upload video: ${response.status} ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    // tmpfiles.org returns { status: 'success', data: { url: 'https://tmpfiles.org/12345/video.mp4' } }
+    // But the download URL needs /dl/ inserted: 'https://tmpfiles.org/dl/12345/video.mp4'
+    const tmpUrl = result?.data?.url;
+    if (!tmpUrl) {
+        throw new Error('Temporary host did not return a URL. Response: ' + JSON.stringify(result));
+    }
+
+    // Convert page URL to direct download URL and ensure HTTPS
+    let directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+    if (directUrl.startsWith('http://')) {
+        directUrl = directUrl.replace('http://', 'https://');
+    }
+    console.log('[Kling Motion] Uploaded reference video:', directUrl);
+    onStatusUpdate?.('Reference video uploaded successfully.');
+    return directUrl;
+};
+
 // --- Public API ---
 
 export interface KlingVideoConfig {
@@ -212,7 +255,7 @@ export interface KlingVideoConfig {
     cameraControl?: KlingCameraControl | null;
     withAudio?: boolean;     // Kling 3.0 native audio generation
     motionControl?: {        // Kling 2.6 Motion Control (dynamic_poses)
-        videoDataUrl: string;                     // data URI of the reference video
+        videoUrl: string;                         // publicly accessible HTTPS URL of the reference video
         characterOrientation: 'image' | 'video';  // match image orientation (≤10s) or video orientation (≤30s)
     } | null;
 }
@@ -238,23 +281,98 @@ export const generateKlingVideo = async (
     const mimeMatch = header?.match(/data:(image\/[^;]+)/);
     const mimeType = mimeMatch?.[1] || 'image/jpeg';
 
-    // Build category-aware prompt prefix (Kling-optimized: concise, action-focused)
+    // Build category-aware prompt prefix
+    // When Motion Control is active, skip motion-prescribing prompts — the video drives the motion.
+    // Use appearance-only descriptions so the AI focuses on visual style, not movement.
     let contextPrefix = '';
-    switch (category) {
-        case 'jewelry':
-            contextPrefix = 'Extreme close-up of luxury jewelry. Light catches gemstones and polished metal surfaces. Subtle rotation reveals intricate details.';
-            break;
-        case 'kurti':
-            contextPrefix = 'Fashion model poses in Indian Kurti. Fabric moves naturally with body motion.';
-            break;
-        case 'lehenga':
-            contextPrefix = 'Model spins slowly in heavy Lehenga, skirt flares outward revealing embroidery layers. Dupatta trails gracefully.';
-            break;
-        default:
-            contextPrefix = 'Model walks forward in draped saree, pallu flows over shoulder. Silk fabric catches light with each step.';
+    if (config.motionControl) {
+        // Neutral appearance-only prefix — no movement instructions
+        switch (category) {
+            case 'jewelry':
+                contextPrefix = 'Luxury jewelry with gemstones and polished metal surfaces.';
+                break;
+            case 'kurti':
+                contextPrefix = 'Fashion model wearing Indian Kurti.';
+                break;
+            case 'lehenga':
+                contextPrefix = 'Model wearing a heavy Lehenga with embroidery and dupatta.';
+                break;
+            default:
+                contextPrefix = 'Model wearing a draped saree with flowing silk fabric.';
+        }
+    } else {
+        // Standard motion-prescribing prefix for non-motion-control generation
+        switch (category) {
+            case 'jewelry':
+                contextPrefix = 'Extreme close-up of luxury jewelry. Light catches gemstones and polished metal surfaces. Subtle rotation reveals intricate details.';
+                break;
+            case 'kurti':
+                contextPrefix = 'Fashion model poses in Indian Kurti. Fabric moves naturally with body motion.';
+                break;
+            case 'lehenga':
+                contextPrefix = 'Model spins slowly in heavy Lehenga, skirt flares outward revealing embroidery layers. Dupatta trails gracefully.';
+                break;
+            default:
+                contextPrefix = 'Model walks forward in draped saree, pallu flows over shoulder. Silk fabric catches light with each step.';
+        }
     }
 
     const fullPrompt = `${contextPrefix} ${prompt}`.trim();
+
+    // --- Motion Control uses a SEPARATE endpoint and parameter structure ---
+    if (config.motionControl) {
+        // Official Kling API: POST /v1/videos/motion-control
+        // Top-level params: model_name, image_url, video_url, character_orientation, mode, prompt
+        const motionBody: any = {
+            model_name: config.model || 'kling-v2-6',
+            image_url: base64Data,              // raw base64 WITHOUT data:image/...;base64, prefix
+            video_url: config.motionControl.videoUrl,  // publicly accessible HTTPS URL
+            character_orientation: config.motionControl.characterOrientation,
+            mode: config.mode || 'pro',
+            prompt: fullPrompt,
+            keep_original_sound: 'yes',
+        };
+
+        // Debug logging
+        const debugMotion = { ...motionBody };
+        debugMotion.image_url = `[raw base64, ${debugMotion.image_url.length} chars]`;
+        debugMotion.video_url = `[${debugMotion.video_url?.substring(0, 40)}..., ${debugMotion.video_url?.length} chars total]`;
+        console.log('[Kling Motion Control] Endpoint: /videos/motion-control');
+        console.log('[Kling Motion Control] Request body keys:', Object.keys(motionBody));
+        console.log('[Kling Motion Control] Request body (sanitized):', JSON.stringify(debugMotion, null, 2));
+
+        // Create motion control task
+        const createResult = await klingFetch('/videos/motion-control', {
+            method: 'POST',
+            body: JSON.stringify(motionBody),
+        });
+
+        const taskId = createResult?.data?.task_id;
+        if (!taskId) {
+            throw new Error('Kling Motion Control did not return a task ID. Response: ' + JSON.stringify(createResult));
+        }
+
+        onStatusUpdate?.('Motion control video generation started...');
+
+        // Poll for completion using the motion-control endpoint
+        const completedTask = await pollTask(taskId, '/videos/motion-control', onStatusUpdate);
+
+        const videoResult = completedTask?.task_result?.videos?.[0];
+        console.log('[Kling Motion Control] Full task result:', JSON.stringify(completedTask, null, 2));
+        console.log('[Kling Motion Control] Video result:', JSON.stringify(videoResult, null, 2));
+
+        if (!videoResult?.url) {
+            throw new Error('Kling Motion Control completed but no video URL returned.');
+        }
+
+        return {
+            url: videoResult.url,
+            taskId: String(completedTask.task_id),
+            videoId: String(videoResult.id || videoResult.video_id || ''),
+        };
+    }
+
+    // --- Standard image2video flow (no motion control) ---
 
     // Build request body
     const body: any = {
@@ -271,27 +389,14 @@ export const generateKlingVideo = async (
         body.with_audio = true;
     }
 
-    // Add Motion Control (dynamic_poses) if specified — mutually exclusive with camera_control
-    if (config.motionControl) {
-        body.dynamic_poses = [{
-            video_url: config.motionControl.videoDataUrl,
-            character_orientation: config.motionControl.characterOrientation,
-        }];
-        // camera_control and dynamic_poses are mutually exclusive
-    } else if (config.cameraControl) {
-        // Add camera control if specified (only when NOT using motion control)
+    // Add camera control if specified
+    if (config.cameraControl) {
         body.camera_control = config.cameraControl;
     }
 
     // Debug: Log request body details (without full base64 data)
     const debugBody = { ...body };
     if (debugBody.image) debugBody.image = `[base64 image, ${debugBody.image.length} chars]`;
-    if (debugBody.dynamic_poses) {
-        debugBody.dynamic_poses = debugBody.dynamic_poses.map((dp: any) => ({
-            ...dp,
-            video_url: `[${dp.video_url?.substring(0, 30)}..., ${dp.video_url?.length} chars total]`,
-        }));
-    }
     console.log('[Kling Generate] Request body keys:', Object.keys(body));
     console.log('[Kling Generate] Request body (sanitized):', JSON.stringify(debugBody, null, 2));
 

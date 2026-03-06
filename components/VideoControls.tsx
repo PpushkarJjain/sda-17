@@ -78,6 +78,10 @@ interface VideoControlsProps {
     setKlingMotionControlEnabled?: (enabled: boolean) => void;
     klingCharacterOrientation?: 'image' | 'video';
     setKlingCharacterOrientation?: (o: 'image' | 'video') => void;
+    motionVideoSource?: 'auto' | 'url';
+    setMotionVideoSource?: (s: 'auto' | 'url') => void;
+    motionVideoUrl?: string;
+    setMotionVideoUrl?: (url: string) => void;
 }
 
 const CAMERA_PRESETS = [
@@ -138,6 +142,10 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     setKlingMotionControlEnabled,
     klingCharacterOrientation,
     setKlingCharacterOrientation,
+    motionVideoSource,
+    setMotionVideoSource,
+    motionVideoUrl,
+    setMotionVideoUrl,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -306,6 +314,46 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                             <span className="text-sm">🎯</span>
                                             <span>Reference video motion will be directly applied to your character. Camera controls are disabled in this mode.</span>
                                         </div>
+
+                                        {/* Video Source Selector */}
+                                        {setMotionVideoSource && (
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Video Source</label>
+                                                <div className="flex bg-white p-1 rounded-lg border border-purple-200">
+                                                    <button
+                                                        onClick={() => setMotionVideoSource('auto')}
+                                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${motionVideoSource === 'auto' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        ☁️ Auto Upload
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setMotionVideoSource('url')}
+                                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${motionVideoSource === 'url' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        🔗 Provide URL
+                                                    </button>
+                                                </div>
+                                                <p className="text-[9px] text-gray-400 mt-1 italic">
+                                                    {motionVideoSource === 'auto'
+                                                        ? 'Your uploaded video will be temporarily hosted for Kling to access.'
+                                                        : 'Paste a direct HTTPS link to your video file.'
+                                                    }
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Manual URL Input */}
+                                        {motionVideoSource === 'url' && setMotionVideoUrl && (
+                                            <div>
+                                                <input
+                                                    type="url"
+                                                    value={motionVideoUrl || ''}
+                                                    onChange={(e) => setMotionVideoUrl(e.target.value)}
+                                                    placeholder="https://example.com/reference-video.mp4"
+                                                    className="w-full p-2.5 bg-white text-gray-900 placeholder-gray-400 border border-purple-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-xs shadow-sm"
+                                                />
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>
