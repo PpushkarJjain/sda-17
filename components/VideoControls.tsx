@@ -78,6 +78,10 @@ interface VideoControlsProps {
     setKlingMotionControlEnabled?: (enabled: boolean) => void;
     klingCharacterOrientation?: 'image' | 'video';
     setKlingCharacterOrientation?: (o: 'image' | 'video') => void;
+    motionVideoSource?: 'auto' | 'url';
+    setMotionVideoSource?: (s: 'auto' | 'url') => void;
+    motionVideoUrl?: string;
+    setMotionVideoUrl?: (url: string) => void;
 }
 
 const CAMERA_PRESETS = [
@@ -138,6 +142,10 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     setKlingMotionControlEnabled,
     klingCharacterOrientation,
     setKlingCharacterOrientation,
+    motionVideoSource,
+    setMotionVideoSource,
+    motionVideoUrl,
+    setMotionVideoUrl,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -306,6 +314,46 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                             <span className="text-sm">🎯</span>
                                             <span>Reference video motion will be directly applied to your character. Camera controls are disabled in this mode.</span>
                                         </div>
+
+                                        {/* Video Source Selector */}
+                                        {setMotionVideoSource && (
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Video Source</label>
+                                                <div className="flex bg-white p-1 rounded-lg border border-purple-200">
+                                                    <button
+                                                        onClick={() => setMotionVideoSource('auto')}
+                                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${motionVideoSource === 'auto' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        ☁️ Auto Upload
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setMotionVideoSource('url')}
+                                                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${motionVideoSource === 'url' ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        🔗 Provide URL
+                                                    </button>
+                                                </div>
+                                                <p className="text-[9px] text-gray-400 mt-1 italic">
+                                                    {motionVideoSource === 'auto'
+                                                        ? 'Your uploaded video will be temporarily hosted for Kling to access.'
+                                                        : 'Paste a direct HTTPS link to your video file.'
+                                                    }
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Manual URL Input */}
+                                        {motionVideoSource === 'url' && setMotionVideoUrl && (
+                                            <div>
+                                                <input
+                                                    type="url"
+                                                    value={motionVideoUrl || ''}
+                                                    onChange={(e) => setMotionVideoUrl(e.target.value)}
+                                                    placeholder="https://example.com/reference-video.mp4"
+                                                    className="w-full p-2.5 bg-white text-gray-900 placeholder-gray-400 border border-purple-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-xs shadow-sm"
+                                                />
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -404,20 +452,20 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                             )}
 
                             <div>
-                                <label htmlFor="additional-details" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Additional Details (Optional)</label>
+                                <label htmlFor="additional-details" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Video Prompt</label>
                                 <textarea
                                     id="additional-details"
                                     value={additionalDetails}
                                     onChange={(e) => setAdditionalDetails(e.target.value)}
-                                    placeholder="e.g. Keep the lighting dark and moody, ensure the background is blurry..."
+                                    placeholder="Describe the motion, camera work, and style you want. You can paste from the generated prompt above and edit it."
                                     className="w-full p-3 bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm h-24 resize-none shadow-sm transition-shadow"
                                 />
-                                <p className="text-[10px] text-gray-400 mt-1 italic">Used to guide style alongside the video motion analysis.</p>
+                                <p className="text-[10px] text-gray-400 mt-1 italic">This is the prompt sent to the AI. Copy from the generated prompt above if needed, or write your own.</p>
                             </div>
 
                             <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800 leading-relaxed flex gap-2">
                                 <span className="text-xl">💡</span>
-                                <span><strong>AI Tip:</strong> Ensure your reference video has clear lighting and a steady camera for best results.</span>
+                                <span><strong>Tip:</strong> Use "Generate Prompt from Reference" to get AI-suggested prompts, then copy & paste what you like into the Video Prompt box above.</span>
                             </div>
                         </div>
                     )}
