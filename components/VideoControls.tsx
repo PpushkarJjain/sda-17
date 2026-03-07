@@ -18,25 +18,29 @@ export const categoryTemplates: Record<FashionCategory, VideoTemplate[]> = {
         { id: 'walk', name: 'Elegant Catwalk', prompt: 'A model walking gracefully towards the camera, the saree fabric flowing beautifully with every step.' },
         { id: 'spin', name: '360° Slow Turn', prompt: 'A cinematic slow-motion 360-degree orbit around the model, highlighting the drape and back-side detailing.' },
         { id: 'reveal', name: 'Pallu Reveal', prompt: 'The model gently lifts and reveals the pallu, focusing on the intricate embroidery and heavy gold work.' },
-        { id: 'twirl', name: 'Gentle Twirl', prompt: 'The model performing a gentle twirl in an outdoor garden, showing the volume and movement of the saree skirt.' }
+        { id: 'twirl', name: 'Gentle Twirl', prompt: 'The model performing a gentle twirl in an outdoor garden, showing the volume and movement of the saree skirt.' },
+        { id: 'custom', name: '✨ Custom Movement', prompt: '' }
     ],
     kurti: [
         { id: 'walk', name: 'Chic Runway Walk', prompt: 'Confident runway walk, showing the fit and movement of the Kurti.' },
         { id: 'fabric_flow', name: 'Fabric Flow (Wind)', prompt: 'Soft wind blowing to showcase the lightness and texture of the fabric.' },
         { id: 'spin_fast', name: 'Quick Spin', prompt: 'A fun, energetic spin to show the flare of the Anarkali/Kurti.' },
-        { id: 'detail_pan', name: 'Vertical Pan', prompt: 'Slow camera pan from bottom hem to neckline, focusing on pattern details.' }
+        { id: 'detail_pan', name: 'Vertical Pan', prompt: 'Slow camera pan from bottom hem to neckline, focusing on pattern details.' },
+        { id: 'custom', name: '✨ Custom Movement', prompt: '' }
     ],
     lehenga: [
         { id: 'royal_twirl', name: 'Royal Slow Twirl', prompt: 'A slow-motion cinematic twirl showing the massive volume/ghera of the lehenga skirt fanning out completely.' },
         { id: 'bridal_entry', name: 'Bridal Walk', prompt: 'A royal bridal entry walk, slow paced, showcasing the heavy dupatta and intricate embroidery work.' },
         { id: 'dupatta_adjust', name: 'Veil Adjustment', prompt: 'Close up of the model gently adjusting her dupatta veil, highlighting the border work and jewelry.' },
-        { id: 'sitting_flare', name: 'Seated Flare', prompt: 'Camera panning around a model seated royally with the lehenga skirt spread out in a perfect circle on the floor.' }
+        { id: 'sitting_flare', name: 'Seated Flare', prompt: 'Camera panning around a model seated royally with the lehenga skirt spread out in a perfect circle on the floor.' },
+        { id: 'custom', name: '✨ Custom Movement', prompt: '' }
     ],
     jewelry: [
         { id: 'sparkle', name: 'Sparkle & Shine', prompt: 'Slow camera movement to catch the light reflections on the gems and metal. emphasize specular highlights.' },
         { id: 'macro_pan', name: 'Macro Pan', prompt: 'Extreme close-up slow pan across the details of the jewelry piece. Shallow depth of field.' },
         { id: 'breath', name: 'Living Portrait', prompt: 'Subtle model breathing movement to show the jewelry resting naturally on skin. Very realistic.' },
-        { id: 'rack_focus', name: 'Rack Focus', prompt: 'Focus shifting slowly from the model\'s eyes to the jewelry piece.' }
+        { id: 'rack_focus', name: 'Rack Focus', prompt: 'Focus shifting slowly from the model\'s eyes to the jewelry piece.' },
+        { id: 'custom', name: '✨ Custom Movement', prompt: '' }
     ]
 };
 
@@ -82,6 +86,9 @@ interface VideoControlsProps {
     setMotionVideoSource?: (s: 'auto' | 'url') => void;
     motionVideoUrl?: string;
     setMotionVideoUrl?: (url: string) => void;
+    // Custom Movement
+    customMovementPrompt?: string;
+    setCustomMovementPrompt?: (s: string) => void;
 }
 
 const CAMERA_PRESETS = [
@@ -146,6 +153,8 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     setMotionVideoSource,
     motionVideoUrl,
     setMotionVideoUrl,
+    customMovementPrompt,
+    setCustomMovementPrompt,
 }) => {
     const templates = categoryTemplates[category] || categoryTemplates['saree'];
     const klingAvailable = isKlingAvailable();
@@ -403,17 +412,32 @@ const VideoControls: React.FC<VideoControlsProps> = ({
                                 </div>
                             </div>
 
-                            <div>
-                                <label htmlFor="custom-prompt" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Custom Description (Optional)</label>
-                                <textarea
-                                    id="custom-prompt"
-                                    value={customPrompt}
-                                    onChange={(e) => setCustomPrompt(e.target.value)}
-                                    placeholder="e.g. Make it slow motion, focus on the face..."
-                                    className="w-full p-3 bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm h-24 resize-none shadow-sm transition-shadow"
-                                />
-                                <p className="text-[10px] text-gray-400 mt-1 italic">Appended to the selected template prompt.</p>
-                            </div>
+                            {/* Custom Movement Prompt — shown only when Custom Movement template is selected */}
+                            {selectedTemplate.id === 'custom' && setCustomMovementPrompt ? (
+                                <div className="animate-in fade-in slide-in-from-top-2">
+                                    <label htmlFor="custom-movement-prompt" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Describe Your Custom Movement</label>
+                                    <textarea
+                                        id="custom-movement-prompt"
+                                        value={customMovementPrompt || ''}
+                                        onChange={(e) => setCustomMovementPrompt(e.target.value)}
+                                        placeholder={`Describe the movement or action you want, for example:\n• Model slowly walks forward while adjusting the pallu\n• Camera orbits 180° while model poses\n• Slow-motion saree toss with wind effect\n• Close-up pan from jewelry to face with rack focus`}
+                                        className="w-full p-3 bg-white text-gray-900 placeholder-gray-400 border border-rose-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm h-32 resize-none shadow-sm transition-shadow"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-1 italic">This will be used as the primary motion prompt for video generation.</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label htmlFor="custom-prompt" className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Custom Description (Optional)</label>
+                                    <textarea
+                                        id="custom-prompt"
+                                        value={customPrompt}
+                                        onChange={(e) => setCustomPrompt(e.target.value)}
+                                        placeholder="e.g. Make it slow motion, focus on the face..."
+                                        className="w-full p-3 bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm h-24 resize-none shadow-sm transition-shadow"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-1 italic">Appended to the selected template prompt.</p>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-right-2">

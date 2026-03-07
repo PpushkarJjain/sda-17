@@ -23,6 +23,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
     // New Input State
     const [templateCustomPrompt, setTemplateCustomPrompt] = useState('');
     const [referenceAdditionalDetails, setReferenceAdditionalDetails] = useState('');
+    const [customMovementPrompt, setCustomMovementPrompt] = useState('');
 
     // Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -55,9 +56,13 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
             let finalPrompt = "";
 
             if (activeTab === 'template') {
-                finalPrompt = selectedTemplate.prompt;
-                if (templateCustomPrompt.trim()) {
-                    finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                if (selectedTemplate.id === 'custom') {
+                    finalPrompt = customMovementPrompt.trim() || 'Cinematic fashion showcase with elegant movement.';
+                } else {
+                    finalPrompt = selectedTemplate.prompt;
+                    if (templateCustomPrompt.trim()) {
+                        finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                    }
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
                 // Use only the user's manual prompt input (Video Prompt)
@@ -216,6 +221,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
                         setCustomPrompt={setTemplateCustomPrompt}
                         additionalDetails={referenceAdditionalDetails}
                         setAdditionalDetails={setReferenceAdditionalDetails}
+                        customMovementPrompt={customMovementPrompt}
+                        setCustomMovementPrompt={setCustomMovementPrompt}
                     />
                 </div>
             </div>

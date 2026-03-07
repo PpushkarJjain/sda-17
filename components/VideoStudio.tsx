@@ -28,6 +28,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     // New Input State
     const [templateCustomPrompt, setTemplateCustomPrompt] = useState('');
     const [referenceAdditionalDetails, setReferenceAdditionalDetails] = useState('');
+    const [customMovementPrompt, setCustomMovementPrompt] = useState('');
 
     // Provider State
     const [videoProvider, setVideoProvider] = useState<VideoProvider>('gemini');
@@ -95,9 +96,13 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
             let finalPrompt = "";
 
             if (activeTab === 'template') {
-                finalPrompt = selectedTemplate.prompt;
-                if (templateCustomPrompt.trim()) {
-                    finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                if (selectedTemplate.id === 'custom') {
+                    finalPrompt = customMovementPrompt.trim() || 'Cinematic fashion showcase with elegant movement.';
+                } else {
+                    finalPrompt = selectedTemplate.prompt;
+                    if (templateCustomPrompt.trim()) {
+                        finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                    }
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
                 // Use only the user's manual prompt input (Additional Details / Video Prompt)
@@ -393,6 +398,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setMotionVideoSource={setMotionVideoSource}
                             motionVideoUrl={motionVideoUrl}
                             setMotionVideoUrl={setMotionVideoUrl}
+                            customMovementPrompt={customMovementPrompt}
+                            setCustomMovementPrompt={setCustomMovementPrompt}
                         />
                     </div>
                 </div>
