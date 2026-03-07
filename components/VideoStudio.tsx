@@ -430,15 +430,30 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                     </span>
                                 )}
                                 {currentVideoUrl && (
-                                    <a
-                                        href={currentVideoUrl}
-                                        download="saree_showcase.mp4"
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const response = await fetch(currentVideoUrl);
+                                                const blob = await response.blob();
+                                                const blobUrl = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = blobUrl;
+                                                a.download = `${category}_showcase.mp4`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(blobUrl);
+                                            } catch (err) {
+                                                // Fallback: open in new tab if fetch fails
+                                                window.open(currentVideoUrl, '_blank');
+                                            }
+                                        }}
                                         className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors shadow-lg"
                                     >
                                         <DownloadIcon />
                                         <span className="hidden sm:inline">Download MP4</span>
                                         <span className="sm:hidden">Save</span>
-                                    </a>
+                                    </button>
                                 )}
                             </div>
                         </div>
