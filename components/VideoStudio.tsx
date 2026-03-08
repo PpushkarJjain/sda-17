@@ -126,6 +126,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     aspectRatio: '9:16',
                     cameraControl: klingCameraControl,
                     withAudio: klingWithAudio,
+                    customMovement: activeTab === 'template' && selectedTemplate.id === 'custom',
                 };
 
                 // Motion Control: upload reference video to get a public URL for Kling
@@ -170,8 +171,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 };
                 setHistory(prev => [newEntry, ...prev]);
             } else {
-                // --- Gemini Veo generation ---
-                const result = await generateFashionVideo(category, finalPrompt, base64Image, (s) => setStatus(s));
+                const isCustomMovement = activeTab === 'template' && selectedTemplate.id === 'custom';
+                const result = await generateFashionVideo(category, finalPrompt, base64Image, (s) => setStatus(s), isCustomMovement);
                 setCurrentVideoUrl(result.url);
                 setCurrentVideoResource(result.videoResource);
                 setCurrentKlingTaskId(null);

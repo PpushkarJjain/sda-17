@@ -258,6 +258,7 @@ export interface KlingVideoConfig {
         videoUrl: string;                         // publicly accessible HTTPS URL of the reference video
         characterOrientation: 'image' | 'video';  // match image orientation (≤10s) or video orientation (≤30s)
     } | null;
+    customMovement?: boolean;  // When true, skip motion-prescribing prefix — user's prompt drives motion entirely
 }
 
 /**
@@ -285,8 +286,9 @@ export const generateKlingVideo = async (
     // When Motion Control is active, skip motion-prescribing prompts — the video drives the motion.
     // Use appearance-only descriptions so the AI focuses on visual style, not movement.
     let contextPrefix = '';
-    if (config.motionControl) {
+    if (config.motionControl || config.customMovement) {
         // Neutral appearance-only prefix — no movement instructions
+        // Used for Motion Control (video drives motion) and Custom Movement (user's prompt drives motion)
         switch (category) {
             case 'jewelry':
                 contextPrefix = 'Luxury jewelry with gemstones and polished metal surfaces.';

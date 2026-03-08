@@ -995,7 +995,8 @@ export const generateFashionVideo = async (
   category: 'saree' | 'kurti' | 'jewelry' | 'lehenga',
   prompt: string,
   startingImageBase64: string,
-  onStatusUpdate?: (status: string) => void
+  onStatusUpdate?: (status: string) => void,
+  customMovement?: boolean
 ): Promise<{ url: string, videoResource: any }> => {
   const apiKey = getActiveApiKey();
   await ensurePaidApiKey();
@@ -1003,14 +1004,28 @@ export const generateFashionVideo = async (
   const [, data] = startingImageBase64.split(',');
 
   let contextPrefix = "";
-  if (category === 'jewelry') {
-    contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
-  } else if (category === 'kurti') {
-    contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
-  } else if (category === 'lehenga') {
-    contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+  if (customMovement) {
+    // Neutral appearance-only prefix — user's custom prompt drives the motion
+    if (category === 'jewelry') {
+      contextPrefix = "Luxury jewelry with gemstones and polished metal surfaces.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing Indian Kurti.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Model wearing a heavy Lehenga with embroidery and dupatta.";
+    } else {
+      contextPrefix = "Model wearing a draped saree with flowing silk fabric.";
+    }
   } else {
-    contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    // Standard motion-prescribing prefix for predefined templates
+    if (category === 'jewelry') {
+      contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+    } else {
+      contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    }
   }
 
   try {

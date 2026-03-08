@@ -69,7 +69,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
                 finalPrompt = referenceAdditionalDetails.trim() || 'Cinematic fashion showcase with natural movement.';
             }
 
-            const result = await generateFashionVideo(category as 'saree' | 'kurti' | 'jewelry', finalPrompt, startingImage, (s) => setStatus(s));
+            const isCustomMovement = activeTab === 'template' && selectedTemplate.id === 'custom';
+            const result = await generateFashionVideo(category as 'saree' | 'kurti' | 'jewelry', finalPrompt, startingImage, (s) => setStatus(s), isCustomMovement);
             setVideoUrl(result.url);
             setVideoResource(result.videoResource);
         } catch (e: any) {
