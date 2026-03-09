@@ -333,7 +333,7 @@ export const generateVirtualTryOn = async (
     }
 
     let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
-    let designTypeInstruction = cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`));
+    let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
     let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
 
     prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
