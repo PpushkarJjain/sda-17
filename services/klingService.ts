@@ -306,16 +306,16 @@ export const generateKlingVideo = async (
         // Standard motion-prescribing prefix for non-motion-control generation
         switch (category) {
             case 'jewelry':
-                contextPrefix = 'Extreme close-up of luxury jewelry. Light catches gemstones and polished metal surfaces. Subtle rotation reveals intricate details.';
+                contextPrefix = 'Jewelry with gemstones and polished metal surfaces.';
                 break;
             case 'kurti':
-                contextPrefix = 'Fashion model poses in Indian Kurti. Fabric moves naturally with body motion.';
+                contextPrefix = 'Fashion model wearing Indian Kurti.';
                 break;
             case 'lehenga':
-                contextPrefix = 'Model spins slowly in heavy Lehenga, skirt flares outward revealing embroidery layers. Dupatta trails gracefully.';
+                contextPrefix = 'Model wearing a heavy Lehenga with embroidery and dupatta.';
                 break;
             default:
-                contextPrefix = 'Model walks forward in draped saree, pallu flows over shoulder. Silk fabric catches light with each step.';
+                contextPrefix = 'Model wearing a draped saree with flowing silk fabric.';
         }
     }
 

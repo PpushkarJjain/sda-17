@@ -399,12 +399,22 @@ export const generateVirtualTryOn = async (
   } else if (category === 'lehenga' && assets.lehenga && categoryConfig.lehenga) {
     const cfg = categoryConfig.lehenga;
     prompt += `Generate a lifelike female model.\n`;
+    const skirtVolumeInstruction = cfg.skirtVolume === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga images and determine the exact skirt volume/silhouette (A-line, ballgown, mermaid, straight, etc.). Replicate that exact volume and shape faithfully.]'
+      : `${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape)`;
+    const drapingStyleInstruction = cfg.drapingStyle === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga/dupatta images and determine the exact dupatta draping style (pinned side, pleated, head-cover, cape, etc.). Replicate that exact draping faithfully.]'
+      : cfg.drapingStyle;
+    const blouseCutInstruction = cfg.blouseCut === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded choli/blouse images and determine the exact blouse cut (sleeveless, off-shoulder, full sleeves, peplum, etc.). Replicate that exact cut and style faithfully.]'
+      : cfg.blouseCut;
+
     prompt += `**CORE OBJECTIVE:** Dress model in the provided Lehenga Choli (3-piece ethnic set).
       
       **CONSTRUCTION SPECIFICATIONS:**
-      - **Skirt Volume:** ${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape).
-      - **Draping Style:** ${cfg.drapingStyle}. (Dupatta placement is critical).
-      - **Blouse Cut:** ${cfg.blouseCut}.
+      - **Skirt Volume:** ${skirtVolumeInstruction}.
+      - **Draping Style:** ${drapingStyleInstruction}. (Dupatta placement is critical).
+      - **Blouse Cut:** ${blouseCutInstruction}.
       
       **STYLING RULES:**
       - **Midriff:** Unless "Long Choli" is selected, the midriff/navel area MUST be realistically visible with accurate skin texture.
