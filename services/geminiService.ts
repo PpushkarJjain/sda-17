@@ -333,7 +333,7 @@ export const generateVirtualTryOn = async (
     }
 
     let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
-    let designTypeInstruction = cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`));
+    let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
     let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
 
     prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
@@ -399,12 +399,22 @@ export const generateVirtualTryOn = async (
   } else if (category === 'lehenga' && assets.lehenga && categoryConfig.lehenga) {
     const cfg = categoryConfig.lehenga;
     prompt += `Generate a lifelike female model.\n`;
+    const skirtVolumeInstruction = cfg.skirtVolume === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga images and determine the exact skirt volume/silhouette (A-line, ballgown, mermaid, straight, etc.). Replicate that exact volume and shape faithfully.]'
+      : `${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape)`;
+    const drapingStyleInstruction = cfg.drapingStyle === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga/dupatta images and determine the exact dupatta draping style (pinned side, pleated, head-cover, cape, etc.). Replicate that exact draping faithfully.]'
+      : cfg.drapingStyle;
+    const blouseCutInstruction = cfg.blouseCut === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded choli/blouse images and determine the exact blouse cut (sleeveless, off-shoulder, full sleeves, peplum, etc.). Replicate that exact cut and style faithfully.]'
+      : cfg.blouseCut;
+
     prompt += `**CORE OBJECTIVE:** Dress model in the provided Lehenga Choli (3-piece ethnic set).
       
       **CONSTRUCTION SPECIFICATIONS:**
-      - **Skirt Volume:** ${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape).
-      - **Draping Style:** ${cfg.drapingStyle}. (Dupatta placement is critical).
-      - **Blouse Cut:** ${cfg.blouseCut}.
+      - **Skirt Volume:** ${skirtVolumeInstruction}.
+      - **Draping Style:** ${drapingStyleInstruction}. (Dupatta placement is critical).
+      - **Blouse Cut:** ${blouseCutInstruction}.
       
       **STYLING RULES:**
       - **Midriff:** Unless "Long Choli" is selected, the midriff/navel area MUST be realistically visible with accurate skin texture.
@@ -995,7 +1005,8 @@ export const generateFashionVideo = async (
   category: 'saree' | 'kurti' | 'jewelry' | 'lehenga',
   prompt: string,
   startingImageBase64: string,
-  onStatusUpdate?: (status: string) => void
+  onStatusUpdate?: (status: string) => void,
+  customMovement?: boolean
 ): Promise<{ url: string, videoResource: any }> => {
   const apiKey = getActiveApiKey();
   await ensurePaidApiKey();
@@ -1003,14 +1014,28 @@ export const generateFashionVideo = async (
   const [, data] = startingImageBase64.split(',');
 
   let contextPrefix = "";
-  if (category === 'jewelry') {
-    contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
-  } else if (category === 'kurti') {
-    contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
-  } else if (category === 'lehenga') {
-    contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+  if (customMovement) {
+    // Neutral appearance-only prefix — user's custom prompt drives the motion
+    if (category === 'jewelry') {
+      contextPrefix = "Luxury jewelry with gemstones and polished metal surfaces.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing Indian Kurti.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Model wearing a heavy Lehenga with embroidery and dupatta.";
+    } else {
+      contextPrefix = "Model wearing a draped saree with flowing silk fabric.";
+    }
   } else {
-    contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    // Standard motion-prescribing prefix for predefined templates
+    if (category === 'jewelry') {
+      contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+    } else {
+      contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    }
   }
 
   try {
@@ -1026,8 +1051,15 @@ export const generateFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video generation failed: No video URI returned. The content may have been blocked by safety filters, or the model could not generate a video from this image/prompt. Please try a different image or prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download generated video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
@@ -1055,8 +1087,15 @@ export const extendFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation: operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo extend response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video extension failed: No video URI returned. The content may have been blocked by safety filters. Please try a different prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download extended video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
