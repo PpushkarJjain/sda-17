@@ -1051,8 +1051,15 @@ export const generateFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video generation failed: No video URI returned. The content may have been blocked by safety filters, or the model could not generate a video from this image/prompt. Please try a different image or prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download generated video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
@@ -1080,8 +1087,15 @@ export const extendFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation: operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo extend response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video extension failed: No video URI returned. The content may have been blocked by safety filters. Please try a different prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download extended video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
