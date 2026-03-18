@@ -61,7 +61,12 @@ const MainApp: React.FC = () => {
     jewelleryLevel: 'None',
     hasBindi: false,
     enableEnhancedAnalysis: false,
+    colorMatchingEnabled: false,
   });
+
+  // Color Matching State
+  const [colorSetImage, setColorSetImage] = useState<SareeImage | null>(null);
+  const [colorReferenceImage, setColorReferenceImage] = useState<SareeImage | null>(null);
 
   // Kurti State
   const [kurtiImages, setKurtiImages] = useState<KurtiImageSet>({
@@ -440,6 +445,7 @@ const MainApp: React.FC = () => {
     if (selectedPoses.includes('Match Reference Pose') && !referenceImage) { setError('Upload "Style Reference Image" for matching pose.'); return; }
     if (selectedPoses.includes('Custom Pose') && !customPose.trim()) { setError('Describe the custom pose.'); return; }
     if (background === 'Custom...' && !customBackground.trim()) { setError('Enter custom background description.'); return; }
+    if (activeCategory === 'saree' && sareeConfig.colorMatchingEnabled && !colorReferenceImage) { setError('Please upload a "Scene Layout Reference" image for Color Matching mode.'); return; }
 
     if (generatedImages.length > 0) setLastBatch(generatedImages);
     setIsLoading(true); setError(null); setGeneratedImages([]);
@@ -471,7 +477,7 @@ const MainApp: React.FC = () => {
           };
 
           const categoryConfig = {
-            saree: { ...sareeConfig, analyzedTextureDescription: textureDescription },
+            saree: { ...sareeConfig, analyzedTextureDescription: textureDescription, colorSetImage, colorReferenceImage },
             kurti: kurtiConfig,
             jewelry: { ...jewelryConfig, analyzedProductDescription: jewelryAnalysis },
             lehenga: lehengaConfig
@@ -572,7 +578,8 @@ const MainApp: React.FC = () => {
     setAdditionalDetails(''); setGeneratedImages([]); setLastBatch(null); setError(null);
     setSelectedPresetId(''); setLockRefIdentity(false);
     // Reset configs
-    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'None', hasBindi: false, enableEnhancedAnalysis: false }));
+    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'None', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false }));
+    setColorSetImage(null); setColorReferenceImage(null);
     setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: false, viewMode: 'model' }));
     setLehengaConfig(prev => ({ ...prev, enableEnhancedRealism: false }));
     setKurtiConfig(prev => ({ ...prev, subCategory: 'kurti', enableEnhancedRealism: false }));
@@ -715,6 +722,10 @@ const MainApp: React.FC = () => {
                         config={sareeConfig}
                         onImageChange={handleSareeFileSelect}
                         onConfigChange={(updates) => setSareeConfig(prev => ({ ...prev, ...updates }))}
+                        colorSetImage={colorSetImage}
+                        colorReferenceImage={colorReferenceImage}
+                        onColorSetChange={(file) => setColorSetImage(file ? { file, previewUrl: URL.createObjectURL(file) } : null)}
+                        onColorReferenceChange={(file) => setColorReferenceImage(file ? { file, previewUrl: URL.createObjectURL(file) } : null)}
                       />
                     )}
                     {activeCategory === 'kurti' && (

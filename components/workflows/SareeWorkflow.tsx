@@ -1,7 +1,7 @@
 import React from 'react';
 import ImageUploadSlot from '../ImageUploadSlot';
 import { MagicIcon } from '../icons/MagicIcon';
-import type { SareeImageSet, SareeImageType } from '../../types';
+import type { SareeImage, SareeImageSet, SareeImageType } from '../../types';
 import { SareeConfig } from '../../services/geminiService';
 
 interface SareeWorkflowProps {
@@ -9,6 +9,10 @@ interface SareeWorkflowProps {
     config: SareeConfig & { enableEnhancedAnalysis: boolean };
     onImageChange: (type: SareeImageType, file: File | null) => void;
     onConfigChange: (updates: Partial<SareeConfig & { enableEnhancedAnalysis: boolean }>) => void;
+    colorSetImage: SareeImage | null;
+    colorReferenceImage: SareeImage | null;
+    onColorSetChange: (file: File | null) => void;
+    onColorReferenceChange: (file: File | null) => void;
 }
 
 const sareeUploadSlots: {
@@ -25,7 +29,7 @@ const sareeUploadSlots: {
         { id: 'embroidery', title: 'Embroidery/Design Detail', description: 'A very close-up shot of details.', required: false },
     ];
 
-const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageChange, onConfigChange }) => {
+const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageChange, onConfigChange, colorSetImage, colorReferenceImage, onColorSetChange, onColorReferenceChange }) => {
 
     const getPalluMeasurementLabel = () => {
         if (config.palluStyle.includes("Normal C-Pallu")) return "C-Pallu Border Width (inches)";
@@ -194,6 +198,44 @@ const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageCh
                             </p>
                         </div>
                     </label>
+                </div>
+
+                {/* Color Matching Mode */}
+                <div className={`p-4 border rounded-lg shadow-sm transition-colors ${config.colorMatchingEnabled ? 'bg-teal-50 border-teal-300' : 'bg-white border-gray-200'}`}>
+                    <label className="flex items-center justify-between cursor-pointer mb-2">
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-gray-800 text-sm">🎨 Color Matching Display</span>
+                            <span className="text-[10px] text-gray-400">Generate a composed product display with mannequin drape + color variant wall</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={config.colorMatchingEnabled}
+                                onChange={(e) => onConfigChange({ colorMatchingEnabled: e.target.checked })}
+                                className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
+                        </label>
+                    </label>
+
+                    {config.colorMatchingEnabled && (
+                        <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1">
+                            <ImageUploadSlot
+                                title="Color Set Image"
+                                description="Upload an image showing all available color variants of this saree (e.g., 5-6 swatches laid together)."
+                                isRequired={false}
+                                currentImage={colorSetImage}
+                                onFileSelect={onColorSetChange}
+                            />
+                            <ImageUploadSlot
+                                title="Scene Layout Reference"
+                                description="Upload a reference display photo showing the desired composition layout (mannequin + color wall)."
+                                isRequired={true}
+                                currentImage={colorReferenceImage}
+                                onFileSelect={onColorReferenceChange}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

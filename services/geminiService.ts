@@ -206,6 +206,9 @@ export interface SareeConfig {
   stoneWorkLocation: string;
   jewelleryLevel: string;
   hasBindi: boolean;
+  colorMatchingEnabled: boolean;
+  colorSetImage?: SareeImage | null;
+  colorReferenceImage?: SareeImage | null;
 }
 
 export interface KurtiConfig {
@@ -310,37 +313,86 @@ export const generateVirtualTryOn = async (
 
   if (category === 'saree' && assets.saree && categoryConfig.saree) {
     const cfg = categoryConfig.saree;
-    prompt += `Generate a lifelike female model.\n`; // Explicitly request model for Saree
 
-    // Jewellery Instruction
-    let jewelleryInstruction = "";
-    if (cfg.jewelleryLevel !== 'None') {
-      jewelleryInstruction = `**JEWELLERY STYLING (${cfg.jewelleryLevel.toUpperCase()} INTENSITY):**\n`;
-      if (cfg.jewelleryLevel === 'Sober') {
-        jewelleryInstruction += `- Style: Minimal, elegant, daily wear.\n- Items: Small earrings (studs/drops), thin delicate chain or necklace, simple bangles.\n- Vibe: Sophisticated and understated.`;
-      } else if (cfg.jewelleryLevel === 'Medium') {
-        jewelleryInstruction += `- Style: Balanced traditional, festive wear.\n- Items: Statement earrings (Jhumkas/Chandbalis), layered necklace, set of bangles, small Maang Tikka.\n- Vibe: Semi-bridal or grand party look.`;
-      } else if (cfg.jewelleryLevel === 'Heavy') {
-        jewelleryInstruction += `- Style: Grand Bridal / Royal Heritage.\n- Items: Heavy choker + long necklace (Rani Haar), large earrings, full bangle set, Maang Tikka, Nose ring (Nath), Waist belt (Kamarbandh).\n- Vibe: Opulent wedding look.`;
+    // === COLOR MATCHING MODE ===
+    if (cfg.colorMatchingEnabled && cfg.colorReferenceImage) {
+      prompt = `Generate a professional saree product display image.
+
+**COMPOSITION (from [Layout Reference Image]):**
+- Use the [Layout Reference Image] ONLY for the **spatial arrangement and layout** of elements.
+- Replicate how the main saree and color variants are positioned relative to each other.
+- DO NOT copy the model type, pose, background, or lighting from the layout reference — those come from user instructions below.
+
+**ZONE 1 - MAIN SAREE (Left/Primary Area):**
+- Drape the saree (from [Saree Image]) on a model/figure in the same spatial position as shown in the layout reference.
+- Preserve ALL embroidery patterns, border design, motifs, and fabric texture from the saree image.
+${cfg.analyzedTextureDescription ? `- **FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}` : ''}
+- The BASE COLOR of the main draped saree must match the dominant/primary color visible in the saree image.
+
+**ZONE 2 - COLOR VARIANTS (Right/Secondary Area):**
+- Display the same saree folded and arranged in the same spatial area as shown in the layout reference.
+${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Color Set Image]. Each piece must:
+  * Use the EXACT base fabric color from the color set.
+  * Maintain the SAME embroidery pattern, motifs, and border design visible in the saree image.
+- DO NOT invent new colors. Only use the colors visible in the [Color Set Image].` : '- Generate 3-4 complementary color variants of the same saree design in the display area.'}
+
+**CRITICAL CONSTRAINTS:**
+- The embroidery/motif design must be IDENTICAL across all color variants.
+- Output a SINGLE composed image containing both zones.
+`;
+
+      // Push saree images
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Saree Image] - Primary saree design, pattern, and texture reference:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
       }
-      jewelleryInstruction += `\n- **Harmony:** Jewellery metal tone (Gold/Silver/Rose Gold) MUST perfectly match the saree's Zari/Border work.`;
+      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+
+      // Push color set image (optional)
+      if (cfg.colorSetImage) {
+        parts.push({ text: '[Image: Color Set Image] - All available color variants of this saree:' });
+        parts.push(await fileToGenerativePart(cfg.colorSetImage.file, genMaxDim));
+      }
+
+      // Push layout reference image (required)
+      parts.push({ text: '[Image: Layout Reference Image] - Scene composition and display layout to replicate:' });
+      parts.push(await fileToGenerativePart(cfg.colorReferenceImage.file, genMaxDim));
+
     } else {
-      jewelleryInstruction = `**JEWELLERY:** Keep jewellery minimal or non-existent unless visible in the reference image.`;
+      // === STANDARD SAREE DRAPING MODE ===
+      prompt += `Generate a lifelike female model.\n`; // Explicitly request model for Saree
+
+      // Jewellery Instruction
+      let jewelleryInstruction = "";
+      if (cfg.jewelleryLevel !== 'None') {
+        jewelleryInstruction = `**JEWELLERY STYLING (${cfg.jewelleryLevel.toUpperCase()} INTENSITY):**\n`;
+        if (cfg.jewelleryLevel === 'Sober') {
+          jewelleryInstruction += `- Style: Minimal, elegant, daily wear.\n- Items: Small earrings (studs/drops), thin delicate chain or necklace, simple bangles.\n- Vibe: Sophisticated and understated.`;
+        } else if (cfg.jewelleryLevel === 'Medium') {
+          jewelleryInstruction += `- Style: Balanced traditional, festive wear.\n- Items: Statement earrings (Jhumkas/Chandbalis), layered necklace, set of bangles, small Maang Tikka.\n- Vibe: Semi-bridal or grand party look.`;
+        } else if (cfg.jewelleryLevel === 'Heavy') {
+          jewelleryInstruction += `- Style: Grand Bridal / Royal Heritage.\n- Items: Heavy choker + long necklace (Rani Haar), large earrings, full bangle set, Maang Tikka, Nose ring (Nath), Waist belt (Kamarbandh).\n- Vibe: Opulent wedding look.`;
+        }
+        jewelleryInstruction += `\n- **Harmony:** Jewellery metal tone (Gold/Silver/Rose Gold) MUST perfectly match the saree's Zari/Border work.`;
+      } else {
+        jewelleryInstruction = `**JEWELLERY:** Keep jewellery minimal or non-existent unless visible in the reference image.`;
+      }
+
+      if (cfg.hasBindi) {
+        jewelleryInstruction += `\n- **Face Detail:** Apply a traditional Bindi on the forehead suited to the face shape.`;
+      }
+
+      let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
+      let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
+      let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
+
+      prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
+
+      if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
     }
-
-    if (cfg.hasBindi) {
-      jewelleryInstruction += `\n- **Face Detail:** Apply a traditional Bindi on the forehead suited to the face shape.`;
-    }
-
-    let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
-    let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
-    let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
-
-    prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
-
-    if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
-    if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
-    if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
 
   } else if (category === 'kurti' && assets.kurti && categoryConfig.kurti) {
     const cfg = categoryConfig.kurti;
@@ -910,7 +962,8 @@ export const generateVariation = async (
           hasStoneWork: hasStoneWork,
           stoneWorkLocation: stoneWorkLocation,
           jewelleryLevel: 'None',
-          hasBindi: false
+          hasBindi: false,
+          colorMatchingEnabled: false
         }
       }
     );
