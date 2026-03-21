@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import Spinner from './Spinner';
 import { DownloadIcon } from './icons/DownloadIcon';
+import { PrintIcon } from './icons/PrintIcon';
 import { WandIcon } from './icons/WandIcon';
 import { UndoIcon } from './icons/UndoIcon';
 import { MagicIcon } from './icons/MagicIcon';
 import { FilmIcon } from './icons/FilmIcon';
 import { RefreshIcon } from './icons/RefreshIcon'; // Using RefreshIcon as 'Compare' icon
+import { downloadPrintReadyJPG } from '../utils/printUtils';
 
 interface GeneratedImageCardProps {
     src: string;
@@ -25,6 +27,18 @@ const GeneratedImageCard: React.FC<GeneratedImageCardProps> = ({ src, index, isR
     const [resolution, setResolution] = useState<'Standard' | 'High' | 'Ultra HD'>('Standard');
     const [isComparing, setIsComparing] = useState(false);
     const [sliderPosition, setSliderPosition] = useState(50);
+    const [isPrintDownloading, setIsPrintDownloading] = useState(false);
+
+    const handlePrintDownload = async () => {
+        setIsPrintDownloading(true);
+        try {
+            await downloadPrintReadyJPG(src, `sda-print-${index + 1}.jpg`);
+        } catch (err) {
+            console.error('Print download failed:', err);
+        } finally {
+            setIsPrintDownloading(false);
+        }
+    };
 
     const handleRefineClick = () => {
         onRefine(index, refinementPrompt, resolution);
@@ -188,6 +202,15 @@ const GeneratedImageCard: React.FC<GeneratedImageCardProps> = ({ src, index, isR
                             >
                                 <DownloadIcon />
                             </a>
+                            <button
+                                onClick={handlePrintDownload}
+                                disabled={isPrintDownloading}
+                                className="p-2 bg-emerald-600 rounded-full text-white hover:bg-emerald-700 disabled:bg-emerald-300 transition-all shadow-md flex items-center gap-1 font-bold"
+                                title="Download Print-Ready JPG (300 DPI)"
+                            >
+                                <PrintIcon className="w-4 h-4" />
+                                <span className="text-xs pr-1">{isPrintDownloading ? 'Converting...' : 'Print'}</span>
+                            </button>
                         </>
                     )}
                 </div>
