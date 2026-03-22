@@ -22,6 +22,7 @@ import JewelryWorkflow from './components/workflows/JewelryWorkflow';
 import LehengaWorkflow from './components/workflows/LehengaWorkflow';
 import CommonControls from './components/CommonControls';
 import PasswordGate from './components/PasswordGate';
+import CostTracker from './components/CostTracker';
 import type { FashionCategory, SareeImage, SareeImageSet, KurtiImageSet, JewelryImageSet, LehengaImageSet, GeneratedImageItem, SavedPreset, SareeImageType, LehengaImageType } from './types';
 
 // Helper to convert base64 back to file for reconstruction
@@ -902,6 +903,7 @@ const MainApp: React.FC = () => {
           category={activeCategory}
         />
       )}
+      <CostTracker />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
+import { logUsage } from './costTracker';
 import type { SareeImage, SareeImageSet, KurtiImageSet, JewelryImageSet, LehengaImageSet, FashionCategory } from '../types';
 import type { VariationConfig } from '../components/VariationModal';
 
@@ -154,6 +155,7 @@ export const analyzeSareeVisuals = async (sareeImages: SareeImageSet): Promise<s
       model: 'gemini-2.5-flash',
       contents: { parts: parts },
     });
+    logUsage('gemini-2.5-flash', 'analyzeSareeVisuals', response.usageMetadata);
     return response.text || "";
   } catch (error) {
     return handleApiError(error);
@@ -181,6 +183,7 @@ export const analyzeJewelryVisuals = async (jewelryImages: JewelryImageSet): Pro
       model: 'gemini-2.5-flash',
       contents: { parts: parts },
     });
+    logUsage('gemini-2.5-flash', 'analyzeJewelryVisuals', response.usageMetadata);
     return response.text || "";
   } catch (error) {
     return handleApiError(error);
@@ -635,6 +638,7 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
       contents: { parts: parts },
       config: { responseModalities: [Modality.IMAGE], imageConfig: imageConfig },
     });
+    logUsage(modelName, 'generateVirtualTryOn', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -702,6 +706,7 @@ export const studioRefiner = async (
         }
       },
     });
+    logUsage(modelName, 'studioRefiner', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -756,6 +761,7 @@ export const refineGeneratedImage = async (
         ...(modelName === 'gemini-3-pro-image-preview' ? { imageConfig } : {})
       },
     });
+    logUsage(modelName, 'refineGeneratedImage', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -849,6 +855,7 @@ export const generateInpainting = async (
       imageConfig: { aspectRatio: "1:1" }
     }
   });
+  logUsage('gemini-3-pro-image-preview', 'generateInpainting', response.usageMetadata);
 
   if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
 
@@ -914,6 +921,7 @@ export const analyzeReferenceImage = async (
       contents: { parts: [{ text: prompt }, imagePart] },
       config: { responseMimeType: "application/json" }
     });
+    logUsage('gemini-2.5-flash', 'analyzeReferenceImage', response.usageMetadata);
     return JSON.parse(response.text.replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error) {
     return handleApiError(error);
