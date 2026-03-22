@@ -365,7 +365,7 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
 
       // Jewellery Instruction
       let jewelleryInstruction = "";
-      if (cfg.jewelleryLevel !== 'None') {
+      if (cfg.jewelleryLevel !== 'Keep As Is') {
         jewelleryInstruction = `**JEWELLERY STYLING (${cfg.jewelleryLevel.toUpperCase()} INTENSITY):**\n`;
         if (cfg.jewelleryLevel === 'Sober') {
           jewelleryInstruction += `- Style: Minimal, elegant, daily wear.\n- Items: Small earrings (studs/drops), thin delicate chain or necklace, simple bangles.\n- Vibe: Sophisticated and understated.`;
@@ -376,7 +376,7 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
         }
         jewelleryInstruction += `\n- **Harmony:** Jewellery metal tone (Gold/Silver/Rose Gold) MUST perfectly match the saree's Zari/Border work.`;
       } else {
-        jewelleryInstruction = `**JEWELLERY:** Keep jewellery minimal or non-existent unless visible in the reference image.`;
+        jewelleryInstruction = `**JEWELLERY (KEEP AS IS):** Retain ALL jewellery and accessories EXACTLY as they appear on the model in the reference image. Do NOT add, remove, or modify any jewellery items. Preserve their exact type, placement, size, and styling.`;
       }
 
       if (cfg.hasBindi) {
@@ -961,7 +961,7 @@ export const generateVariation = async (
           palluMeasurement: palluMeasurement,
           hasStoneWork: hasStoneWork,
           stoneWorkLocation: stoneWorkLocation,
-          jewelleryLevel: 'None',
+          jewelleryLevel: 'Keep As Is',
           hasBindi: false,
           colorMatchingEnabled: false
         }

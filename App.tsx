@@ -58,7 +58,7 @@ const MainApp: React.FC = () => {
     palluMeasurement: '',
     hasStoneWork: false,
     stoneWorkLocation: 'Border Only',
-    jewelleryLevel: 'None',
+    jewelleryLevel: 'Keep As Is',
     hasBindi: false,
     enableEnhancedAnalysis: false,
     colorMatchingEnabled: false,
@@ -395,7 +395,7 @@ const MainApp: React.FC = () => {
         ...prev,
         palluStyle: c.palluStyle || prev.palluStyle, palluMeasurement: c.palluMeasurement || '',
         designType: c.designType || prev.designType, hasStoneWork: c.hasStoneWork || false,
-        stoneWorkLocation: c.stoneWorkLocation || 'Border Only', jewelleryLevel: c.jewelleryLevel || 'None',
+        stoneWorkLocation: c.stoneWorkLocation || 'Border Only', jewelleryLevel: c.jewelleryLevel || 'Keep As Is',
         hasBindi: c.hasBindi || false, enableEnhancedAnalysis: c.enableEnhancedAnalysis || false
       }));
       setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: c.enableEnhancedRealism || false }));
@@ -578,7 +578,7 @@ const MainApp: React.FC = () => {
     setAdditionalDetails(''); setGeneratedImages([]); setLastBatch(null); setError(null);
     setSelectedPresetId(''); setLockRefIdentity(false);
     // Reset configs
-    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'None', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false }));
+    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'Keep As Is', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false }));
     setColorSetImage(null); setColorReferenceImage(null);
     setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: false, viewMode: 'model' }));
     setLehengaConfig(prev => ({ ...prev, enableEnhancedRealism: false }));

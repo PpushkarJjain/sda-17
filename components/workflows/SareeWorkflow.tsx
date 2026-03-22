@@ -145,7 +145,7 @@ const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageCh
                         <div>
                             <label className="text-xs font-medium text-gray-600 mb-1 block">Jewellery Intensity</label>
                             <div className="grid grid-cols-4 gap-1">
-                                {['None', 'Sober', 'Medium', 'Heavy'].map((level) => (
+                                {['Keep As Is', 'Sober', 'Medium', 'Heavy'].map((level) => (
                                     <button
                                         key={level}
                                         onClick={() => onConfigChange({ jewelleryLevel: level as any })}
