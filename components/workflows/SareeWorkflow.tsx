@@ -31,6 +31,8 @@ const sareeUploadSlots: {
 
 const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageChange, onConfigChange, colorSetImage, colorReferenceImage, onColorSetChange, onColorReferenceChange }) => {
 
+    const viewMode = config.viewMode || 'model'; // Default to model if undefined
+
     const getPalluMeasurementLabel = () => {
         if (config.palluStyle.includes("Normal C-Pallu")) return "C-Pallu Border Width (inches)";
         if (config.palluStyle.includes("Box Pallu")) return "Box Pallu Width (inches)";
@@ -39,6 +41,25 @@ const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageCh
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
+
+            {/* Mode Toggle Switch */}
+            <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex">
+                <button 
+                    onClick={() => onConfigChange({ viewMode: 'model' })} 
+                    className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${viewMode === 'model' ? 'bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                    <span className="font-bold text-sm">Model Showcase</span>
+                    <span className="text-[10px] opacity-70">Draped on Model</span>
+                </button>
+                <button 
+                    onClick={() => onConfigChange({ viewMode: 'product' })} 
+                    className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${viewMode === 'product' ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                    <span className="font-bold text-sm">Product Photography</span>
+                    <span className="text-[10px] opacity-70">Display Shot (No Model)</span>
+                </button>
+            </div>
+
             <div className="space-y-4">
                 {sareeUploadSlots.map(slot => (
                     <ImageUploadSlot
@@ -137,7 +158,8 @@ const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageCh
                     )}
                 </div>
 
-                {/* Jewellery & Bindi Options */}
+                {/* Jewellery & Bindi Options (Hidden in Product Photography mode) */}
+                {viewMode === 'model' && (
                 <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                     <label className="block text-sm font-semibold text-gray-800 mb-3">Jewellery Styling & Accessories</label>
 
@@ -176,6 +198,7 @@ const SareeWorkflow: React.FC<SareeWorkflowProps> = ({ images, config, onImageCh
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Enhanced Analysis Toggle */}
                 <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">

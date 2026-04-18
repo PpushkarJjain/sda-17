@@ -212,6 +212,7 @@ export interface SareeConfig {
   colorMatchingEnabled: boolean;
   colorSetImage?: SareeImage | null;
   colorReferenceImage?: SareeImage | null;
+  viewMode: 'model' | 'product';
 }
 
 export interface KurtiConfig {
@@ -362,8 +363,26 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
       parts.push({ text: '[Image: Layout Reference Image] - Scene composition and display layout to replicate:' });
       parts.push(await fileToGenerativePart(cfg.colorReferenceImage.file, genMaxDim));
 
+    } else if (cfg.viewMode === 'product') {
+      // === SAREE PRODUCT PHOTOGRAPHY MODE ===
+      prompt += `**CORE OBJECTIVE:** Professional Saree Product Photography.
+          **TASK:** Render the saree in a high-end commercial product display format.
+          **CONSTRAINT:** NO HUMAN MODEL. NO SKIN. Focus entirely on the saree fabric, its draping on the display surface/mannequin, texture details, and the visual presentation.
+          **CONTEXT:** ${coreConfig.poseDescription}
+          `;
+
+      let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
+      let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
+      let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
+
+      prompt += `${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}`;
+
+      if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+
     } else {
-      // === STANDARD SAREE DRAPING MODE ===
+      // === STANDARD SAREE DRAPING MODE (MODEL) ===
       prompt += `Generate a lifelike female model.\n`; // Explicitly request model for Saree
 
       // Jewellery Instruction
@@ -883,34 +902,35 @@ export const generateInpainting = async (
 export const analyzeReferenceImage = async (
   file: File,
   category: FashionCategory = 'saree',
-  jewelryMode?: 'product' | 'model'
+  viewMode?: 'product' | 'model'
 ): Promise<{ pose: string, background: string, model_attributes: string }> => {
   const apiKey = getActiveApiKey();
   const ai = new GoogleGenAI({ apiKey });
   const imagePart = await fileToGenerativePart(file, 800);
 
   let prompt = "";
+  const isProductMode = viewMode === 'product';
 
-  if (category === 'jewelry') {
-    if (jewelryMode === 'product') {
-      prompt = `Analyze this product photography image and return JSON.
-          Focus on the PHOTOGRAPHY STYLE.
-          
-          {
-            "pose": "Describe the camera angle (e.g. Macro, Top-down, 45-degree), Composition (Rule of thirds, Center), and Placement (e.g. Floating, On velvet).",
-            "background": "Describe the surface material, lighting style (e.g. Softbox, Hard rim light), and background color/texture.",
-            "model_attributes": "N/A"
-          }`;
-    } else {
-      prompt = `Analyze this fashion photography image and return JSON.
-          Focus on the MODEL and POSE.
-          
-          {
-            "pose": "Describe the model's pose and how the jewelry is displayed (e.g. Hand on cheek showing ring).",
-            "background": "Describe the scene/environment.",
-            "model_attributes": "Describe model ethnicity, skin tone, and features."
-          }`;
-    }
+  if (isProductMode) {
+    // Product photography analysis — shared across jewelry & saree product modes
+    const productContext = category === 'jewelry' ? 'jewelry product' : 'saree/garment product display';
+    prompt = `Analyze this ${productContext} photography image and return JSON.
+        Focus on the PHOTOGRAPHY STYLE.
+        
+        {
+          "pose": "Describe the camera angle (e.g. Macro, Top-down, 45-degree, Eye-level), Composition (Rule of thirds, Center, Symmetrical), and Placement/Display style (e.g. Flat lay, On mannequin, Folded, Hanging, On velvet stand).",
+          "background": "Describe the surface material, lighting style (e.g. Softbox, Hard rim light, Natural window), and background color/texture.",
+          "model_attributes": "N/A"
+        }`;
+  } else if (category === 'jewelry') {
+    prompt = `Analyze this fashion photography image and return JSON.
+        Focus on the MODEL and POSE.
+        
+        {
+          "pose": "Describe the model's pose and how the jewelry is displayed (e.g. Hand on cheek showing ring).",
+          "background": "Describe the scene/environment.",
+          "model_attributes": "Describe model ethnicity, skin tone, and features."
+        }`;
   } else {
     prompt = `Analyze image and return JSON: { "pose": "Describe the model's pose...", "background": "Describe the scene...", "model_attributes": "Describe model features..." }`;
   }
@@ -971,7 +991,8 @@ export const generateVariation = async (
           stoneWorkLocation: stoneWorkLocation,
           jewelleryLevel: 'Keep As Is',
           hasBindi: false,
-          colorMatchingEnabled: false
+          colorMatchingEnabled: false,
+          viewMode: 'model'
         }
       }
     );

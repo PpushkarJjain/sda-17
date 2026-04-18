@@ -63,6 +63,7 @@ const MainApp: React.FC = () => {
     hasBindi: false,
     enableEnhancedAnalysis: false,
     colorMatchingEnabled: false,
+    viewMode: 'model', // Default to Model Showcase
   });
 
   // Color Matching State
@@ -224,7 +225,9 @@ const MainApp: React.FC = () => {
     setReferenceAnalysis(null);
     setError(null);
     try {
-      const analysis = await analyzeReferenceImage(referenceImage.file, activeCategory, jewelryConfig.viewMode);
+      const currentViewMode = activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
+                               activeCategory === 'saree' ? sareeConfig.viewMode : undefined;
+      const analysis = await analyzeReferenceImage(referenceImage.file, activeCategory, currentViewMode);
       setReferenceAnalysis(analysis);
 
       // Auto-apply generated descriptions
@@ -579,7 +582,7 @@ const MainApp: React.FC = () => {
     setAdditionalDetails(''); setGeneratedImages([]); setLastBatch(null); setError(null);
     setSelectedPresetId(''); setLockRefIdentity(false);
     // Reset configs
-    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'Keep As Is', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false }));
+    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'Keep As Is', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false, viewMode: 'model' }));
     setColorSetImage(null); setColorReferenceImage(null);
     setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: false, viewMode: 'model' }));
     setLehengaConfig(prev => ({ ...prev, enableEnhancedRealism: false }));
@@ -658,7 +661,14 @@ const MainApp: React.FC = () => {
                             const c = cat as FashionCategory;
                             setActiveCategory(c);
                             // Smart pose reset on category switch
-                            if (c === 'saree') setSelectedPoses(['Standing Gracefully']);
+                            if (c === 'saree') {
+                              // Respect the current saree viewMode
+                              if (sareeConfig.viewMode === 'product') {
+                                setSelectedPoses(['Flat Lay (Full Spread)']);
+                              } else {
+                                setSelectedPoses(['Standing Gracefully']);
+                              }
+                            }
                             else if (c === 'kurti') setSelectedPoses(['Standing Casual']);
                             else if (c === 'lehenga') setSelectedPoses(['Bridal Standing (Royal)']);
                             else if (c === 'jewelry') {
@@ -722,7 +732,20 @@ const MainApp: React.FC = () => {
                         images={sareeImages}
                         config={sareeConfig}
                         onImageChange={handleSareeFileSelect}
-                        onConfigChange={(updates) => setSareeConfig(prev => ({ ...prev, ...updates }))}
+                        onConfigChange={(updates) => {
+                          setSareeConfig(prev => {
+                            const newConfig = { ...prev, ...updates };
+                            // Intercept View Mode Toggle to auto-switch poses
+                            if (updates.viewMode && updates.viewMode !== prev.viewMode) {
+                              if (updates.viewMode === 'product') {
+                                setSelectedPoses(['Flat Lay (Full Spread)']);
+                              } else {
+                                setSelectedPoses(['Standing Gracefully']);
+                              }
+                            }
+                            return newConfig;
+                          });
+                        }}
                         colorSetImage={colorSetImage}
                         colorReferenceImage={colorReferenceImage}
                         onColorSetChange={(file) => setColorSetImage(file ? { file, previewUrl: URL.createObjectURL(file) } : null)}
@@ -827,7 +850,8 @@ const MainApp: React.FC = () => {
                   setAspectRatio={setAspectRatio}
                   additionalDetails={additionalDetails}
                   setAdditionalDetails={setAdditionalDetails}
-                  jewelryMode={jewelryConfig.viewMode} // Passing the mode here
+                  viewMode={activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
+                            activeCategory === 'saree' ? sareeConfig.viewMode : undefined}
                 />
 
                 <div className="p-4 bg-rose-100/60 border border-rose-200 rounded-lg text-sm text-rose-800 mt-6">
