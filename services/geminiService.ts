@@ -377,9 +377,30 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
 
       prompt += `${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}`;
 
-      if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
-      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
-      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Full Saree] - The complete saree fabric. Use this as the PRIMARY source for saree design, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      }
+      if (assets.saree.border) {
+        parts.push({ text: '[Image: Saree Border Close-up] - Detailed border design to replicate accurately:' });
+        parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      }
+      if (assets.saree.pallu) {
+        parts.push({ text: '[Image: Saree Pallu Close-up] - Pallu section design to replicate:' });
+        parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      }
+      if (assets.saree.skirt) {
+        parts.push({ text: '[Image: Saree Skirt Portion] - Main drape portion detail:' });
+        parts.push(await fileToGenerativePart(assets.saree.skirt.file, genMaxDim));
+      }
+      if (assets.saree.blouse) {
+        parts.push({ text: '[Image: Blouse Piece Fabric] - The BLOUSE fabric/design. The model\'s blouse MUST use this exact fabric, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.blouse.file, genMaxDim));
+      }
+      if (assets.saree.embroidery) {
+        parts.push({ text: '[Image: Embroidery/Design Detail] - Close-up embellishment detail to preserve:' });
+        parts.push(await fileToGenerativePart(assets.saree.embroidery.file, genMaxDim));
+      }
 
     } else {
       // === STANDARD SAREE DRAPING MODE (MODEL) ===
@@ -409,11 +430,43 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
       let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
       let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
 
-      prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
+      // Blouse instruction (only if blouse image is provided)
+      let blouseInstruction = '';
+      if (assets.saree.blouse) {
+        blouseInstruction = `\n**BLOUSE INSTRUCTION (CRITICAL):**
+- The model's BLOUSE must be made from the EXACT fabric shown in the [Blouse Piece Fabric] image.
+- Match the blouse's COLOR, PATTERN, TEXTURE, and DESIGN exactly from that image.
+- Do NOT auto-generate a blouse color. Do NOT match the blouse to the saree color.
+- Do NOT copy blouse design from the Style Reference Image.
+- The blouse fabric source is STRICTLY the [Blouse Piece Fabric] input image.`;
+      }
 
-      if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
-      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
-      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}${blouseInstruction}`;
+
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Full Saree] - The complete saree fabric. Use this as the PRIMARY source for saree design, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      }
+      if (assets.saree.border) {
+        parts.push({ text: '[Image: Saree Border Close-up] - Detailed border design to replicate accurately:' });
+        parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      }
+      if (assets.saree.pallu) {
+        parts.push({ text: '[Image: Saree Pallu Close-up] - Pallu section design to replicate:' });
+        parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      }
+      if (assets.saree.skirt) {
+        parts.push({ text: '[Image: Saree Skirt Portion] - Main drape portion detail:' });
+        parts.push(await fileToGenerativePart(assets.saree.skirt.file, genMaxDim));
+      }
+      if (assets.saree.blouse) {
+        parts.push({ text: '[Image: Blouse Piece Fabric] - **CRITICAL: The model\'s BLOUSE must use THIS exact fabric, color, and pattern. Do NOT invent or match from any other source:**' });
+        parts.push(await fileToGenerativePart(assets.saree.blouse.file, genMaxDim));
+      }
+      if (assets.saree.embroidery) {
+        parts.push({ text: '[Image: Embroidery/Design Detail] - Close-up embellishment detail to preserve:' });
+        parts.push(await fileToGenerativePart(assets.saree.embroidery.file, genMaxDim));
+      }
     }
 
   } else if (category === 'kurti' && assets.kurti && categoryConfig.kurti) {
@@ -932,7 +985,14 @@ export const analyzeReferenceImage = async (
           "model_attributes": "Describe model ethnicity, skin tone, and features."
         }`;
   } else {
-    prompt = `Analyze image and return JSON: { "pose": "Describe the model's pose...", "background": "Describe the scene...", "model_attributes": "Describe model features..." }`;
+    prompt = `Analyze this fashion/lifestyle image and return JSON.
+        Focus ONLY on the MODEL's physical attributes and pose. Do NOT describe the clothing or outfit.
+        
+        {
+          "pose": "Describe the model's exact body pose, stance, hand placement, head tilt, and overall posture.",
+          "background": "Describe the scene, environment, and lighting.",
+          "model_attributes": "Describe ONLY the model's physical features: ethnicity, skin tone, face shape, hair style/color, body type, and approximate age. Do NOT describe any clothing, jewelry, or accessories."
+        }`;
   }
 
   try {
