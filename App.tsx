@@ -233,7 +233,11 @@ const MainApp: React.FC = () => {
       // Auto-apply generated descriptions
       if (analysis.pose) {
         setCustomPose(analysis.pose);
-        setSelectedPoses(['Custom Pose']);
+        // Use the correct pose name based on current view mode
+        const isCurrentlyProductMode = 
+          (activeCategory === 'saree' && sareeConfig.viewMode === 'product') ||
+          (activeCategory === 'jewelry' && jewelryConfig.viewMode === 'product');
+        setSelectedPoses([isCurrentlyProductMode ? 'Custom Composition' : 'Custom Pose']);
       }
       if (analysis.background) {
         setCustomBackground(analysis.background);
@@ -472,7 +476,12 @@ const MainApp: React.FC = () => {
 
         setLoadingStage('Generating models...');
         const generationPromises = selectedPoses.map(pose => {
-          let poseDescription = pose === 'Custom Pose' ? customPose : (pose === 'Match Reference Pose' ? "Strictly replicate posture from Style Reference Image" : pose);
+          let poseDescription = pose;
+          if (pose === 'Custom Pose' || pose === 'Custom Composition') {
+            poseDescription = customPose || pose; // Use customPose text, fallback to pose name
+          } else if (pose === 'Match Reference Pose' || pose === 'Match Reference Composition') {
+            poseDescription = "Strictly replicate the composition, angle, and posture from the Style Reference Image";
+          }
 
           const coreConfig = {
             poseDescription: `${poseDescription}, in a ${backgroundDescription} setting`,
