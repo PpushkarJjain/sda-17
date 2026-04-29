@@ -257,7 +257,7 @@ export const generateVirtualTryOn = async (
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
 
-  let modelName = 'gemini-2.5-flash-image';
+  let modelName = 'gemini-3.1-flash-image-preview';
   const imageConfig: any = { aspectRatio: coreConfig.aspectRatio || '3:4' };
 
   const isProResolution = coreConfig.resolution === 'High' || coreConfig.resolution === 'Ultra HD';
@@ -838,7 +838,7 @@ export const refineGeneratedImage = async (
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
 
-  let modelName = 'gemini-2.5-flash-image';
+  let modelName = 'gemini-3.1-flash-image-preview';
   const imageConfig: any = { aspectRatio: '3:4' }; // Default aspect ratio, though refine usually respects input. 
   // Note: For refine, we might want to preserve input aspect ratio, but the API might require one. 
   // gemini-2.5-flash-image doesn't strictly enforce aspect ratio on edit if not provided, but gemini-3-pro might.
