@@ -733,7 +733,8 @@ export const studioRefiner = async (
     resolution: string,
     aspectRatio: string,
     modelDescription: string,
-    additionalDetails: string
+    additionalDetails: string,
+    viewMode?: 'model' | 'product'
   }
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
@@ -741,27 +742,65 @@ export const studioRefiner = async (
   const modelName = 'gemini-3-pro-image-preview';
   const ai = new GoogleGenAI({ apiKey });
   const parts: any[] = [];
+  const isProductMode = config.viewMode === 'product';
 
   // Context-aware prompt construction
   let categoryInstruction = "";
-  if (config.category === 'jewelry') {
-    categoryInstruction = "CATEGORY: JEWELRY. Focus on high-frequency details: metallic luster, gemstone refraction, caustics, and realistic skin shadows. Maintain exact geometry.";
-  } else if (config.category === 'kurti') {
-    categoryInstruction = "CATEGORY: KURTI/ETHNIC WEAR. Focus on fabric weight, stitching details, embroidery texture, and natural cloth folds.";
-  } else if (config.category === 'lehenga') {
-    categoryInstruction = "CATEGORY: LEHENGA CHOLI. Focus on the volume of the skirt (Ghera), intricate embroidery on the blouse, and the natural fall of the dupatta. Maintain the 3-piece structure.";
+  if (isProductMode) {
+    // Product Photography Refiner
+    if (config.category === 'jewelry') {
+      categoryInstruction = "CATEGORY: JEWELRY PRODUCT PHOTOGRAPHY. Focus on metallic surface reflections, gemstone clarity, caustic lighting effects, and surface material texture. NO HUMAN elements.";
+    } else if (config.category === 'saree') {
+      categoryInstruction = "CATEGORY: SAREE PRODUCT PHOTOGRAPHY. Focus on fabric texture detail, weave pattern clarity, color accuracy, draping arrangement on the display surface, and lighting quality. NO HUMAN MODEL.";
+    } else if (config.category === 'kurti') {
+      categoryInstruction = "CATEGORY: KURTI PRODUCT PHOTOGRAPHY. Focus on fabric texture, stitching details, embroidery clarity, and garment presentation. NO HUMAN MODEL.";
+    } else {
+      categoryInstruction = "CATEGORY: LEHENGA PRODUCT PHOTOGRAPHY. Focus on fabric volume, embroidery detail, dupatta texture, and display arrangement. NO HUMAN MODEL.";
+    }
   } else {
-    categoryInstruction = "CATEGORY: SAREE. Focus on silk/zari texture sheen, pleat physics, and heavy drape realism.";
+    // Model-based Refiner (existing behavior)
+    if (config.category === 'jewelry') {
+      categoryInstruction = "CATEGORY: JEWELRY. Focus on high-frequency details: metallic luster, gemstone refraction, caustics, and realistic skin shadows. Maintain exact geometry.";
+    } else if (config.category === 'kurti') {
+      categoryInstruction = "CATEGORY: KURTI/ETHNIC WEAR. Focus on fabric weight, stitching details, embroidery texture, and natural cloth folds.";
+    } else if (config.category === 'lehenga') {
+      categoryInstruction = "CATEGORY: LEHENGA CHOLI. Focus on the volume of the skirt (Ghera), intricate embroidery on the blouse, and the natural fall of the dupatta. Maintain the 3-piece structure.";
+    } else {
+      categoryInstruction = "CATEGORY: SAREE. Focus on silk/zari texture sheen, pleat physics, and heavy drape realism.";
+    }
   }
 
-  // Note: Studio Refiner INTENTIONALLY preserves the model identity as it's assumed the user owns the source photo.
-  let basePrompt = `You are a high-end fashion retouching expert. 
-  ${categoryInstruction}
-  Mode: ${config.fidelityMode.toUpperCase()}. 
-  Style: ${config.visualStyle}. 
-  Model: ${config.modelDescription}. 
-  Bg: ${config.background}. 
-  ${config.additionalDetails}`;
+  let basePrompt: string;
+  if (isProductMode) {
+    // Product photography retouching prompt
+    basePrompt = `You are a high-end product photography retouching expert.
+    ${categoryInstruction}
+    Mode: ${config.fidelityMode.toUpperCase()}.
+    Style: ${config.visualStyle}.
+    
+    **TASK:** Retouch and enhance this PRODUCT PHOTOGRAPHY image.
+    **CONSTRAINT:** This is a product-only shot. There is NO HUMAN MODEL. Do NOT add any human elements.
+    **FOCUS AREAS:**
+    - Enhance fabric/material texture clarity and detail
+    - Improve lighting quality and surface reflections
+    - Ensure accurate, vibrant color reproduction
+    - Clean up the display surface/background
+    - Sharpen pattern and embroidery details
+    - Maintain the exact product placement and composition
+    
+    Composition: ${config.pose}.
+    Background/Surface: ${config.background}.
+    ${config.additionalDetails}`;
+  } else {
+    // Model-based retouching prompt (existing behavior)
+    basePrompt = `You are a high-end fashion retouching expert. 
+    ${categoryInstruction}
+    Mode: ${config.fidelityMode.toUpperCase()}. 
+    Style: ${config.visualStyle}. 
+    Model: ${config.modelDescription}. 
+    Bg: ${config.background}. 
+    ${config.additionalDetails}`;
+  }
 
   parts.push({ text: basePrompt });
   parts.push(await fileToGenerativePart(modelPhoto, 2048));

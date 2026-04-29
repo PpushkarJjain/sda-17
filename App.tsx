@@ -109,6 +109,7 @@ const MainApp: React.FC = () => {
   const [refinerModelPhoto, setRefinerModelPhoto] = useState<SareeImage | null>(null);
   const [refinerSareeDetail, setRefinerSareeDetail] = useState<SareeImage | null>(null);
   const [fidelityMode, setFidelityMode] = useState<'accurate' | 'marketing'>('accurate');
+  const [refinerViewMode, setRefinerViewMode] = useState<'model' | 'product'>('model');
   const [modelDescription, setModelDescription] = useState<string>('Professional Indian model, mid-20s, elegant features');
 
   // --- Shared Config State ---
@@ -506,15 +507,22 @@ const MainApp: React.FC = () => {
         const genFunc = async (p: string) => studioRefiner(refinerModelPhoto!.file, refinerSareeDetail?.file || null, {
           category: activeCategory, fidelityMode, pose: p, background: backgroundDescription,
           visualStyle, resolution, aspectRatio, modelDescription,
-          additionalDetails: `${additionalDetails}. Jewellery: ${sareeConfig.jewelleryLevel}. Bindi: ${sareeConfig.hasBindi ? 'Yes' : 'No'}.`
+          additionalDetails: `${additionalDetails}. Jewellery: ${sareeConfig.jewelleryLevel}. Bindi: ${sareeConfig.hasBindi ? 'Yes' : 'No'}.`,
+          viewMode: refinerViewMode
         });
 
         if (fidelityMode === 'accurate') {
-          const res = await genFunc("Subtle posture repair");
+          const accuratePrompt = refinerViewMode === 'product' ? "Subtle enhancement and cleanup" : "Subtle posture repair";
+          const res = await genFunc(accuratePrompt);
           setGeneratedImages([{ current: res, history: [] }]);
         } else {
           const results = await Promise.all(selectedPoses.map(p => {
-            let pd = p === 'Custom Pose' ? customPose : (p === 'Match Reference Pose' ? "Strictly replicate posture" : p);
+            let pd = p;
+            if (p === 'Custom Pose' || p === 'Custom Composition') {
+              pd = customPose || p;
+            } else if (p === 'Match Reference Pose' || p === 'Match Reference Composition') {
+              pd = "Strictly replicate the composition, angle, and posture from the Style Reference Image";
+            }
             return genFunc(pd);
           }));
           setGeneratedImages(results.map(url => ({ current: url, history: [] })));
@@ -803,8 +811,30 @@ const MainApp: React.FC = () => {
 
                 {activeTab === 'refiner' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* Refiner View Mode Toggle */}
+                    <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex">
+                      <button 
+                        onClick={() => setRefinerViewMode('model')} 
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${refinerViewMode === 'model' ? 'bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        <span className="font-bold text-sm">Model Photo</span>
+                        <span className="text-[10px] opacity-70">Refine Human Model Shot</span>
+                      </button>
+                      <button 
+                        onClick={() => setRefinerViewMode('product')} 
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${refinerViewMode === 'product' ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        <span className="font-bold text-sm">Product Photo</span>
+                        <span className="text-[10px] opacity-70">Refine Product Shot (No Model)</span>
+                      </button>
+                    </div>
+
                     <div className="bg-rose-50 p-4 border border-rose-200 rounded-xl shadow-sm">
-                      <ImageUploadSlot title="Primary Model Photo" description="Existing photo of a model wearing the garment you want to refine." isRequired={true} currentImage={refinerModelPhoto} onFileSelect={(file) => setRefinerModelPhoto(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} />
+                      <ImageUploadSlot 
+                        title={refinerViewMode === 'product' ? "Primary Product Photo" : "Primary Model Photo"} 
+                        description={refinerViewMode === 'product' ? "Existing product photography image you want to refine and enhance." : "Existing photo of a model wearing the garment you want to refine."} 
+                        isRequired={true} currentImage={refinerModelPhoto} onFileSelect={(file) => setRefinerModelPhoto(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} 
+                      />
                     </div>
                     <div className="bg-indigo-50/50 p-4 border border-indigo-100 rounded-xl">
                       <ImageUploadSlot title={activeCategory === 'jewelry' ? "Macro Detail / Gemstone Close-up" : "Garment Detail / Swatch"} description={activeCategory === 'jewelry' ? "High-res shot of the gems/metal to ensure sparkle accuracy." : "Optional high-res close-up of the border or pattern to anchor texture accuracy."} isRequired={false} currentImage={refinerSareeDetail} onFileSelect={(file) => setRefinerSareeDetail(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} />
@@ -817,13 +847,15 @@ const MainApp: React.FC = () => {
                           <button onClick={() => setFidelityMode('marketing')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${fidelityMode === 'marketing' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Marketing</button>
                         </div>
                       </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Persistent Model Description</label>
-                          {syncModelSuccess && <span className="text-[10px] text-green-600 font-bold animate-pulse">Synced from Reference Image!</span>}
+                      {refinerViewMode === 'model' && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Persistent Model Description</label>
+                            {syncModelSuccess && <span className="text-[10px] text-green-600 font-bold animate-pulse">Synced from Reference Image!</span>}
+                          </div>
+                          <textarea value={modelDescription} onChange={(e) => setModelDescription(e.target.value)} placeholder="e.g., Professional Indian model, elegant features, mid-20s..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-rose-500 text-sm h-24 shadow-inner" />
                         </div>
-                        <textarea value={modelDescription} onChange={(e) => setModelDescription(e.target.value)} placeholder="e.g., Professional Indian model, elegant features, mid-20s..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-rose-500 text-sm h-24 shadow-inner" />
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -859,7 +891,8 @@ const MainApp: React.FC = () => {
                   setAspectRatio={setAspectRatio}
                   additionalDetails={additionalDetails}
                   setAdditionalDetails={setAdditionalDetails}
-                  viewMode={activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
+                  viewMode={activeTab === 'refiner' ? refinerViewMode :
+                            activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
                             activeCategory === 'saree' ? sareeConfig.viewMode : undefined}
                 />
 
