@@ -209,11 +209,11 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
   const isEditingSareeMode = !locks.saree;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col md:flex-row overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 md:p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[95vh] md:h-[90vh] flex flex-col md:flex-row overflow-hidden">
         
         {/* Left: Image & Canvas Area */}
-        <div className="w-full md:w-1/2 bg-gray-900 relative flex items-center justify-center p-4">
+        <div className="w-full md:w-1/2 bg-gray-900 relative flex items-center justify-center p-2 md:p-4 min-h-[200px] max-h-[40vh] md:max-h-none shrink-0 md:shrink">
           <div 
             ref={containerRef}
             className={`relative max-w-full max-h-full select-none ${isBrushActive ? 'cursor-crosshair' : ''}`}
@@ -221,7 +221,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
             <img 
                 src={originalImage} 
                 alt="Original" 
-                className="max-h-[85vh] object-contain select-none pointer-events-none" 
+                className="max-h-[35vh] md:max-h-[85vh] object-contain select-none pointer-events-none" 
             />
             <canvas 
                 ref={canvasRef}
@@ -239,7 +239,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
           
           {/* Floating Canvas Tools */}
           {isEditingSareeMode && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md p-2 rounded-full shadow-2xl flex items-center gap-2 border border-gray-200">
+              <div className="absolute bottom-2 md:bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md p-1.5 md:p-2 rounded-full shadow-2xl flex items-center gap-1.5 md:gap-2 border border-gray-200 z-40 max-w-[95%]">
                   <button 
                     onClick={() => setIsBrushActive(!isBrushActive)}
                     className={`p-2 rounded-full transition-all ${isBrushActive ? 'bg-rose-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}
@@ -294,7 +294,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
         </div>
 
         {/* Right: Controls */}
-        <div className="w-full md:w-1/2 flex flex-col bg-gray-50">
+        <div className="w-full md:w-1/2 flex flex-col bg-gray-50 min-h-0 flex-1">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <WandIcon /> Magic Editor
@@ -304,7 +304,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
             </button>
           </div>
 
-          <div className="flex-grow p-6 overflow-y-auto space-y-8">
+          <div className="flex-grow p-4 md:p-6 overflow-y-auto space-y-6 md:space-y-8">
             
             {/* 1. Locks System */}
             <div>
@@ -331,6 +331,38 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                 </div>
             </div>
 
+            {/* AI Mode Indicator (Fix #9) */}
+            {(() => {
+              let modeLabel = '';
+              let modeColor = '';
+              let modeDescription = '';
+              if (!locks.saree && hasMask) {
+                modeLabel = '🎯 Precision Inpainting';
+                modeColor = 'bg-violet-50 border-violet-200 text-violet-800';
+                modeDescription = 'AI will edit only the painted area with high precision.';
+              } else if (!locks.saree) {
+                modeLabel = '✏️ Garment Edit';
+                modeColor = 'bg-indigo-50 border-indigo-200 text-indigo-800';
+                modeDescription = 'AI will modify the garment while preserving the model and background.';
+              } else if (locks.saree && !locks.model) {
+                modeLabel = '📸 New Pose Generation';
+                modeColor = 'bg-blue-50 border-blue-200 text-blue-800';
+                modeDescription = 'AI will regenerate with a new model/pose, keeping the garment consistent.';
+              } else if (locks.saree && locks.model && !locks.background) {
+                modeLabel = '🖼️ Background Swap';
+                modeColor = 'bg-emerald-50 border-emerald-200 text-emerald-800';
+                modeDescription = 'AI will replace only the background with adapted lighting.';
+              } else {
+                modeLabel = '';
+              }
+              return modeLabel ? (
+                <div className={`p-2.5 rounded-lg border text-xs font-medium ${modeColor} flex items-center gap-2`}>
+                  <span className="font-bold">{modeLabel}</span>
+                  <span className="opacity-75">— {modeDescription}</span>
+                </div>
+              ) : null;
+            })()}
+
             <hr className="border-gray-200" />
 
             {/* 2. Variation Settings */}
@@ -352,8 +384,9 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                         )}
 
                         {locks.model && locks.background && (
-                             <div className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-500 text-center italic">
-                                Everything is locked. Unlock 'Model' or 'Background' to make changes.
+                             <div className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 text-center">
+                                <p className="italic">All elements are locked — no variation possible in this mode.</p>
+                                <p className="mt-1.5 text-xs text-gray-500">💡 <strong>Tip:</strong> Unlock <strong>"Model"</strong> for a new pose, unlock <strong>"Background"</strong> to swap the scene, or unlock <strong>"Saree"</strong> to use the precision brush editor.</p>
                              </div>
                         )}
 

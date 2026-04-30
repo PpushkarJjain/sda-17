@@ -198,6 +198,7 @@ export interface VirtualTryOnConfig {
   aspectRatio: string;
   referenceImage: SareeImage | null;
   lockIdentity: boolean;
+  previousResultBase64?: string; // Base64 data URL of a previously generated image for visual continuity
 }
 
 export interface SareeConfig {
@@ -698,7 +699,26 @@ ${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Co
     }
   }
 
+  // If a previous result is provided, instruct the AI to maintain visual continuity
+  if (coreConfig.previousResultBase64) {
+    prompt += `\n\n**VISUAL CONTINUITY (CRITICAL):**
+      A previously generated image is provided below as [PREVIOUS RESULT].
+      - Maintain the EXACT same saree/garment appearance, color, texture, and draping style as in the previous result.
+      - Change ONLY the model, pose, and/or background as instructed above.
+      - The output should look like it belongs to the same photoshoot as the previous result.`;
+  }
+
   parts.push({ text: prompt });
+
+  // Add previous result image for visual continuity
+  if (coreConfig.previousResultBase64) {
+    const [, prevData] = coreConfig.previousResultBase64.split(',');
+    if (prevData) {
+      parts.push({ text: "**[IMAGE: PREVIOUS RESULT] (MAINTAIN VISUAL CONTINUITY — same garment appearance):**" });
+      parts.push({ inlineData: { data: prevData, mimeType: 'image/jpeg' } });
+    }
+  }
+
   if (coreConfig.referenceImage) {
     parts.push({ text: "**[IMAGE: STYLE REFERENCE] (USE FOR LIGHTING/ANGLE ONLY):**" });
     parts.push(await fileToGenerativePart(coreConfig.referenceImage.file, genMaxDim));
@@ -948,9 +968,18 @@ export const generateInpainting = async (
   const croppedImageBase64 = cropCanvas.toDataURL('image/jpeg', 0.95);
 
   const ai = new GoogleGenAI({ apiKey });
+  // Compute dynamic aspect ratio from crop dimensions
+  const cropAspect = cropW / cropH;
+  let inpaintAspectRatio = '1:1';
+  if (cropAspect >= 1.7) inpaintAspectRatio = '16:9';
+  else if (cropAspect >= 1.2) inpaintAspectRatio = '4:3';
+  else if (cropAspect >= 0.9) inpaintAspectRatio = '1:1';
+  else if (cropAspect >= 0.65) inpaintAspectRatio = '3:4';
+  else inpaintAspectRatio = '9:16';
+
   const parts: any[] = [
     { inlineData: { data: croppedImageBase64.split(',')[1], mimeType: 'image/jpeg' } },
-    { text: `Edit this image segment. Focus ONLY on the center area. ${prompt}. Maintain seamless edges.` }
+    { text: `Edit ONLY the painted/highlighted area in this cropped section. Preserve all surrounding details exactly as they are — do not alter unpainted regions. Match the lighting direction, color temperature, and shadow intensity of the surrounding context. ${prompt}. Ensure seamless, artifact-free blending at edges. Maintain photographic realism.` }
   ];
 
   if (referenceElement) {
@@ -963,7 +992,7 @@ export const generateInpainting = async (
     contents: { parts },
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio: "1:1" }
+      imageConfig: { aspectRatio: inpaintAspectRatio }
     }
   });
   logUsage('gemini-3-pro-image-preview', 'generateInpainting', response.usageMetadata);
@@ -1049,59 +1078,83 @@ export const analyzeReferenceImage = async (
 
 export const generateVariation = async (
   originalImageSrc: string,
-  sareeImages: SareeImageSet,
+  category: FashionCategory,
+  allAssets: {
+    saree: SareeImageSet;
+    kurti: KurtiImageSet;
+    jewelry: JewelryImageSet;
+    lehenga: LehengaImageSet;
+  },
   config: VariationConfig,
   baseAdditionalDetails: string,
   visualStyle: string,
   resolution: string,
   aspectRatio: string,
-  palluStyle: string,
-  designType: string,
-  palluMeasurement: string,
-  hasStoneWork: boolean,
-  stoneWorkLocation: string
+  categorySpecificConfig: {
+    saree?: Partial<SareeConfig>;
+    kurti?: Partial<KurtiConfig>;
+    jewelry?: Partial<JewelryConfig>;
+    lehenga?: Partial<LehengaConfig>;
+  }
 ): Promise<string> => {
 
+  // PATH 1: Inpainting (mask painted)
   if (config.maskData) {
     const prompt = config.sareeEditPrompt + (config.sareeColor ? ` Change color to ${config.sareeColor}.` : "");
     return generateInpainting(originalImageSrc, config.maskData, prompt, config.elementReferenceImage);
   }
 
+  // PATH 2: New Pose/Model — regenerate with original product images + previous result for continuity
   if (config.locks.saree && !config.locks.model) {
+    const poseWithBg = !config.locks.background
+      ? `${config.pose}, in a ${config.background} setting`
+      : config.pose;
+
     return generateVirtualTryOn(
-      'saree',
-      { saree: sareeImages },
+      category,
+      allAssets,
       {
-        poseDescription: config.pose,
+        poseDescription: poseWithBg,
         additionalDetails: baseAdditionalDetails,
         visualStyle: visualStyle,
         resolution: resolution,
-        aspectRatio: aspectRatio,
+        aspectRatio: config.aspectRatio || aspectRatio,
         referenceImage: config.referenceImage ? { file: config.referenceImage, previewUrl: "" } : null,
-        lockIdentity: config.lockIdentity
+        lockIdentity: config.lockIdentity,
+        previousResultBase64: originalImageSrc // Feed original for visual continuity
       },
       {
         saree: {
           analyzedTextureDescription: "",
-          palluStyle: palluStyle,
-          designType: designType,
-          palluMeasurement: palluMeasurement,
-          hasStoneWork: hasStoneWork,
-          stoneWorkLocation: stoneWorkLocation,
+          palluStyle: categorySpecificConfig.saree?.palluStyle || 'Nivi Style',
+          designType: categorySpecificConfig.saree?.designType || 'Traditional',
+          palluMeasurement: categorySpecificConfig.saree?.palluMeasurement || '',
+          hasStoneWork: categorySpecificConfig.saree?.hasStoneWork || false,
+          stoneWorkLocation: categorySpecificConfig.saree?.stoneWorkLocation || 'Border Only',
           jewelleryLevel: 'Keep As Is',
           hasBindi: false,
           colorMatchingEnabled: false,
           viewMode: 'model'
-        }
+        },
+        kurti: categorySpecificConfig.kurti as KurtiConfig,
+        jewelry: categorySpecificConfig.jewelry as JewelryConfig,
+        lehenga: categorySpecificConfig.lehenga as LehengaConfig
       }
     );
   }
+
+  // PATH 3: Background Change Only
   if (config.locks.saree && config.locks.model && !config.locks.background) {
     const [, base64Data] = originalImageSrc.split(',');
-    return refineGeneratedImage(base64Data, 'image/jpeg', `Change bg to ${config.background}`);
+    const bgPrompt = `Change ONLY the background to: ${config.background}. Preserve the person, clothing, accessories, and pose with zero alterations. Adapt lighting and color grading to naturally match the new environment. Maintain photographic realism with proper depth of field.`;
+    return refineGeneratedImage(base64Data, 'image/jpeg', bgPrompt, resolution as any);
   }
+
+  // PATH 4: Direct Saree/Garment Edit (no mask)
   const [, base64Data] = originalImageSrc.split(',');
-  return refineGeneratedImage(base64Data, 'image/jpeg', config.sareeEditPrompt);
+  const colorInstruction = config.sareeColor ? ` Change the garment color to: ${config.sareeColor}.` : '';
+  const editPrompt = `Edit the garment in this image. ${config.sareeEditPrompt}.${colorInstruction} Preserve the model's face, body, pose, and background exactly. Maintain photographic realism and consistent lighting.`;
+  return refineGeneratedImage(base64Data, 'image/jpeg', editPrompt, resolution as any);
 };
 
 export const analyzeReferenceVideo = async (videoFile: File): Promise<import('../types').VideoPromptSegment[]> => {

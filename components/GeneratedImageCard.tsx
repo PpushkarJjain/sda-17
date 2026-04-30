@@ -151,19 +151,19 @@ const GeneratedImageCard: React.FC<GeneratedImageCardProps> = ({ src, index, isR
 
                 {/* Hover Overlay - Hide during compare */}
                 {!isRefining && !isComparing && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
                 )}
 
                 {/* Labels & Buttons */}
                 {!isComparing && (
-                    <p className="absolute bottom-2 left-2 text-white font-bold text-sm bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
+                    <p className="absolute bottom-2 left-2 text-white font-bold text-sm bg-black/50 px-2 py-1 rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
                         Model {index + 1}
                     </p>
                 )}
 
                 {/* Actions Overlay */}
                 <div
-                    className={`absolute top-2 right-2 flex flex-col gap-2 transition-opacity duration-300 z-30 ${isComparing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    className={`absolute top-2 right-2 flex flex-col gap-2 transition-opacity duration-300 z-30 ${isComparing ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {canUndo && (

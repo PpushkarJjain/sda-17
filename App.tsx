@@ -559,9 +559,20 @@ const MainApp: React.FC = () => {
     setIsLoading(true); setLoadingStage('Creating variation...'); setError(null);
     try {
       const result = await generateVariation(
-        selectedImageForVariation.src, sareeImages, config, additionalDetails, visualStyle,
-        resolution, aspectRatio, sareeConfig.palluStyle, sareeConfig.designType,
-        sareeConfig.palluMeasurement, sareeConfig.hasStoneWork, sareeConfig.stoneWorkLocation
+        selectedImageForVariation.src,
+        activeCategory,
+        { saree: sareeImages, kurti: kurtiImages, jewelry: jewelryImages, lehenga: lehengaImages },
+        config,
+        additionalDetails,
+        visualStyle,
+        resolution,
+        aspectRatio,
+        {
+          saree: sareeConfig,
+          kurti: kurtiConfig,
+          jewelry: jewelryConfig,
+          lehenga: lehengaConfig
+        }
       );
       setGeneratedImages(prev => [...prev, { current: result, history: [] }]);
       setVariationModalOpen(false);
