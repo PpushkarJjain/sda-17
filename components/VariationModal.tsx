@@ -9,12 +9,15 @@ import { EraserIcon } from './icons/EraserIcon';
 import { UndoIcon } from './icons/UndoIcon';
 import Spinner from './Spinner';
 
+import type { FashionCategory } from '../types';
+
 interface VariationModalProps {
   isOpen: boolean;
   onClose: () => void;
   originalImage: string;
   onGenerate: (config: VariationConfig) => void;
   isLoading: boolean;
+  category: FashionCategory;
 }
 
 export interface VariationConfig {
@@ -26,6 +29,7 @@ export interface VariationConfig {
   pose: string;
   background: string;
   aspectRatio: string;
+  resolution: 'Standard' | 'High' | 'Ultra HD';
   referenceImage: File | null;
   sareeEditPrompt: string;
   sareeColor: string;
@@ -34,9 +38,63 @@ export interface VariationConfig {
   lockIdentity: boolean;
 }
 
-const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, originalImage, onGenerate, isLoading }) => {
+// Category-aware labels and options
+const CATEGORY_CONFIG: Record<FashionCategory, {
+  lockLabel: string;
+  editExamples: string;
+  editExamplesMask: string;
+  recolorPlaceholder: string;
+  referenceLabel: string;
+  precisionHint: string;
+  poses: string[];
+  backgrounds: string[];
+}> = {
+  saree: {
+    lockLabel: 'Saree',
+    editExamples: 'e.g., Make the saree red, add golden border...',
+    editExamplesMask: 'e.g., Change this necklace to diamond, Make the border thinner...',
+    recolorPlaceholder: 'e.g., Royal Blue, Deep Emerald, Gold',
+    referenceLabel: 'Upload Pattern/Jewelry Reference',
+    precisionHint: 'e.g., the neckline, jewelry, or hem',
+    poses: ['Standing Gracefully', 'Walking Pose', 'Seated Elegantly', 'Dancing Pose', 'Backside Pose', 'Close-Up Pose', 'Match Uploaded Reference', 'Custom Pose'],
+    backgrounds: ['Studio Lighting', 'Outdoor Garden', 'Temple', 'Festive Lights', 'Luxury Interior'],
+  },
+  kurti: {
+    lockLabel: 'Kurti',
+    editExamples: 'e.g., Change sleeve length to 3/4, add embroidery on neckline...',
+    editExamplesMask: 'e.g., Change this dupatta color, modify the collar style...',
+    recolorPlaceholder: 'e.g., Teal Blue, Dusty Rose, Mustard Yellow',
+    referenceLabel: 'Upload Pattern/Detail Reference',
+    precisionHint: 'e.g., the neckline, sleeves, or dupatta',
+    poses: ['Standing Casual', 'Walking Pose', 'Seated Cross-Legged', 'Leaning Pose', 'Looking Over Shoulder', 'Close-Up (Top Half)', 'Match Uploaded Reference', 'Custom Pose'],
+    backgrounds: ['Studio Lighting', 'Urban Street', 'Coffee Shop', 'Minimalist Interior', 'Outdoor Park'],
+  },
+  lehenga: {
+    lockLabel: 'Lehenga',
+    editExamples: 'e.g., Add more embroidery, change dupatta draping...',
+    editExamplesMask: 'e.g., Change the choli design, modify the belt...',
+    recolorPlaceholder: 'e.g., Bridal Red, Royal Maroon, Blush Pink',
+    referenceLabel: 'Upload Embroidery/Pattern Reference',
+    precisionHint: 'e.g., the choli, belt, skirt, or dupatta',
+    poses: ['Bridal Standing (Royal)', 'Twirling Pose', 'Seated Regally', 'Walking (Train Visible)', 'Backside (Dupatta Focus)', 'Close-Up (Choli Detail)', 'Match Uploaded Reference', 'Custom Pose'],
+    backgrounds: ['Studio Lighting', 'Grand Palace Hall', 'Wedding Mandap', 'Royal Garden', 'Festive Lights'],
+  },
+  jewelry: {
+    lockLabel: 'Jewelry',
+    editExamples: 'e.g., Change stone color to ruby, make chain thicker...',
+    editExamplesMask: 'e.g., Change this pendant, swap the gemstone...',
+    recolorPlaceholder: 'e.g., Rose Gold, Antique Silver, Polki',
+    referenceLabel: 'Upload Gemstone/Design Reference',
+    precisionHint: 'e.g., the pendant, stones, or clasp area',
+    poses: ['Neck & Shoulder (Necklace)', 'Hand Close-Up (Ring/Bracelet)', 'Ear Close-Up (Earrings)', 'Full Portrait', 'Profile Angle', 'Flat Lay (Top Down)', 'Match Uploaded Reference', 'Custom Pose'],
+    backgrounds: ['Studio Lighting', 'Velvet Drape', 'Marble Surface', 'Luxury Interior', 'Soft Bokeh'],
+  },
+};
+
+const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, originalImage, onGenerate, isLoading, category }) => {
+  const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.saree;
   const [locks, setLocks] = useState({ saree: true, model: false, background: false });
-  const [pose, setPose] = useState('Standing Gracefully');
+  const [pose, setPose] = useState(catConfig.poses[0]);
   const [customPose, setCustomPose] = useState('');
   const [background, setBackground] = useState('Studio Lighting');
   const [aspectRatio, setAspectRatio] = useState('3:4');
@@ -45,6 +103,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [elementRefImage, setElementRefImage] = useState<File | null>(null);
   const [lockIdentity, setLockIdentity] = useState(false);
+  const [resolution, setResolution] = useState<'Standard' | 'High' | 'Ultra HD'>('Standard');
   
   // Magic Brush State
   const [isBrushActive, setIsBrushActive] = useState(false);
@@ -61,6 +120,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
   useEffect(() => {
     if (isOpen) {
       setLocks({ saree: true, model: false, background: false });
+      setPose(catConfig.poses[0]);
       setSareeEditPrompt('');
       setSareeColor('');
       setReferenceImage(null);
@@ -69,6 +129,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
       setBrushMode('draw');
       setHasMask(false);
       setCanvasHistory([]);
+      setResolution('Standard');
       
       // Init Canvas on image load
       const img = new Image();
@@ -181,6 +242,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
       pose: finalPose,
       background,
       aspectRatio,
+      resolution,
       referenceImage,
       sareeEditPrompt,
       sareeColor,
@@ -310,7 +372,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
             <div>
                 <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">1. Lock Elements (What stays same?)</h4>
                 <div className="grid grid-cols-3 gap-3">
-                    {['saree', 'model', 'background'].map((key) => {
+                    {[['saree', catConfig.lockLabel], ['model', category === 'jewelry' ? 'Display' : 'Model'], ['background', 'Background']].map(([key, label]) => {
                         const isLocked = locks[key as keyof typeof locks];
                         return (
                             <button
@@ -323,7 +385,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                                 }`}
                             >
                                 {isLocked ? <LockIcon className="mb-2" /> : <UnlockIcon className="mb-2" />}
-                                <span className="font-semibold capitalize text-sm">{key}</span>
+                                <span className="font-semibold text-sm">{label}</span>
                                 <span className="text-[10px] uppercase mt-1">{isLocked ? 'Locked' : 'Unlocked'}</span>
                             </button>
                         );
@@ -365,6 +427,37 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
 
             <hr className="border-gray-200" />
 
+            {/* Output Quality Selector */}
+            <div>
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Output Quality</h4>
+                <div className="grid grid-cols-3 gap-2">
+                    {(['Standard', 'High', 'Ultra HD'] as const).map((level) => {
+                        const isActive = resolution === level;
+                        const isPaid = level !== 'Standard';
+                        return (
+                            <button
+                                key={level}
+                                onClick={() => setResolution(level)}
+                                className={`relative p-2.5 rounded-lg border-2 text-center transition-all text-sm font-semibold ${
+                                    isActive
+                                    ? 'border-rose-500 bg-rose-50 text-rose-700'
+                                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                }`}
+                            >
+                                {level}
+                                {isPaid && (
+                                    <span className={`block text-[10px] font-normal mt-0.5 ${
+                                        isActive ? 'text-rose-500' : 'text-amber-500'
+                                    }`}>Paid Key</span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <hr className="border-gray-200" />
+
             {/* 2. Variation Settings */}
             <div>
                 <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">2. Variation Settings</h4>
@@ -378,15 +471,15 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
                                 <strong>Mode:</strong> {' '}
                                 {!locks.model && !locks.background && "Full Reshoot (New Pose & Background)."}
-                                {!locks.model && locks.background && "New Pose (Background Preserved)."}
-                                {locks.model && !locks.background && "Change Background (Keep Model & Saree)."}
+                                {!locks.model && locks.background && `New ${category === 'jewelry' ? 'Display' : 'Pose'} (Background Preserved).`}
+                                {locks.model && !locks.background && `Change Background (Keep ${category === 'jewelry' ? 'Display' : 'Model'} & ${catConfig.lockLabel}).`}
                             </div>
                         )}
 
                         {locks.model && locks.background && (
                              <div className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 text-center">
                                 <p className="italic">All elements are locked — no variation possible in this mode.</p>
-                                <p className="mt-1.5 text-xs text-gray-500">💡 <strong>Tip:</strong> Unlock <strong>"Model"</strong> for a new pose, unlock <strong>"Background"</strong> to swap the scene, or unlock <strong>"Saree"</strong> to use the precision brush editor.</p>
+                                <p className="mt-1.5 text-xs text-gray-500">💡 <strong>Tip:</strong> Unlock <strong>"{category === 'jewelry' ? 'Display' : 'Model'}"</strong> for a new pose, unlock <strong>"Background"</strong> to swap the scene, or unlock <strong>"{catConfig.lockLabel}"</strong> to use the precision brush editor.</p>
                              </div>
                         )}
 
@@ -394,24 +487,19 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                         {!locks.model && (
                              <div className="space-y-4">
                                 <h5 className="font-bold text-gray-600 text-sm uppercase tracking-wide border-b border-gray-100 pb-1 flex items-center gap-2">
-                                    <UnlockIcon className="w-3 h-3" /> Model & Pose
+                                    <UnlockIcon className="w-3 h-3" /> {category === 'jewelry' ? 'Display & Angle' : 'Model & Pose'}
                                 </h5>
                                 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">New Pose</label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{category === 'jewelry' ? 'New Display Angle' : 'New Pose'}</label>
                                     <select 
                                         value={pose} 
                                         onChange={(e) => setPose(e.target.value)}
                                         className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded focus:ring-rose-500 text-sm"
                                     >
-                                        <option>Standing Gracefully</option>
-                                        <option>Walking Pose</option>
-                                        <option>Seated Elegantly</option>
-                                        <option>Dancing Pose</option>
-                                        <option>Backside Pose</option>
-                                        <option>Close-Up Pose</option>
-                                        <option>Match Uploaded Reference</option>
-                                        <option>Custom Pose</option>
+                                        {catConfig.poses.map(p => (
+                                            <option key={p}>{p}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -495,11 +583,9 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                                         onChange={(e) => setBackground(e.target.value)}
                                         className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded focus:ring-rose-500 text-sm"
                                     >
-                                        <option>Studio Lighting</option>
-                                        <option>Outdoor Garden</option>
-                                        <option>Temple</option>
-                                        <option>Festive Lights</option>
-                                        <option>Luxury Interior</option>
+                                        {catConfig.backgrounds.map(bg => (
+                                            <option key={bg}>{bg}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -507,11 +593,11 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                     </div>
                 )}
 
-                {/* SCENARIO B: Editing Saree (Saree Unlocked) */}
+                {/* SCENARIO B: Editing Product (Saree/Garment Unlocked) */}
                 {isEditingSareeMode && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-900 mb-4">
-                            <strong>Precision Edit Mode:</strong> Use the brush to paint over the specific area you want to change (e.g., the neckline, jewelry, or hem).
+                            <strong>Precision Edit Mode:</strong> Use the brush to paint over the specific area you want to change ({catConfig.precisionHint}).
                         </div>
 
                         <div>
@@ -560,7 +646,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                                 ) : (
                                     <label className="cursor-pointer flex flex-col items-center gap-1">
                                         <UploadIcon className="w-4 h-4 text-gray-400" />
-                                        <span className="text-xs text-rose-600 font-semibold">Upload Pattern/Jewelry Reference</span>
+                                        <span className="text-xs text-rose-600 font-semibold">{catConfig.referenceLabel}</span>
                                         <input type="file" className="hidden" onChange={handleElementRefChange} />
                                     </label>
                                 )}
@@ -574,7 +660,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                                 type="text"
                                 value={sareeColor}
                                 onChange={(e) => setSareeColor(e.target.value)}
-                                placeholder="e.g., Royal Blue, Deep Emerald, Gold"
+                                placeholder={catConfig.recolorPlaceholder}
                                 className="w-full p-2 bg-white text-gray-900 placeholder-gray-500 border border-gray-300 rounded focus:ring-rose-500 text-sm"
                             />
                         </div>
@@ -584,7 +670,7 @@ const VariationModal: React.FC<VariationModalProps> = ({ isOpen, onClose, origin
                             <textarea
                                 value={sareeEditPrompt}
                                 onChange={(e) => setSareeEditPrompt(e.target.value)}
-                                placeholder={hasMask ? "e.g., Change this necklace to diamond, Make the border thinner..." : "e.g., Make the saree red."}
+                                placeholder={hasMask ? catConfig.editExamplesMask : catConfig.editExamples}
                                 className="w-full p-3 bg-white text-gray-900 placeholder-gray-500 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 text-sm h-24"
                             />
                         </div>

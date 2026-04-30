@@ -1098,6 +1098,9 @@ export const generateVariation = async (
   }
 ): Promise<string> => {
 
+  // Use the resolution from the Magic Editor selector if provided, otherwise fall back to parent
+  const effectiveResolution = config.resolution || resolution;
+
   // PATH 1: Inpainting (mask painted)
   if (config.maskData) {
     const prompt = config.sareeEditPrompt + (config.sareeColor ? ` Change color to ${config.sareeColor}.` : "");
@@ -1117,7 +1120,7 @@ export const generateVariation = async (
         poseDescription: poseWithBg,
         additionalDetails: baseAdditionalDetails,
         visualStyle: visualStyle,
-        resolution: resolution,
+        resolution: effectiveResolution,
         aspectRatio: config.aspectRatio || aspectRatio,
         referenceImage: config.referenceImage ? { file: config.referenceImage, previewUrl: "" } : null,
         lockIdentity: config.lockIdentity,
@@ -1147,14 +1150,14 @@ export const generateVariation = async (
   if (config.locks.saree && config.locks.model && !config.locks.background) {
     const [, base64Data] = originalImageSrc.split(',');
     const bgPrompt = `Change ONLY the background to: ${config.background}. Preserve the person, clothing, accessories, and pose with zero alterations. Adapt lighting and color grading to naturally match the new environment. Maintain photographic realism with proper depth of field.`;
-    return refineGeneratedImage(base64Data, 'image/jpeg', bgPrompt, resolution as any);
+    return refineGeneratedImage(base64Data, 'image/jpeg', bgPrompt, effectiveResolution as any);
   }
 
   // PATH 4: Direct Saree/Garment Edit (no mask)
   const [, base64Data] = originalImageSrc.split(',');
   const colorInstruction = config.sareeColor ? ` Change the garment color to: ${config.sareeColor}.` : '';
   const editPrompt = `Edit the garment in this image. ${config.sareeEditPrompt}.${colorInstruction} Preserve the model's face, body, pose, and background exactly. Maintain photographic realism and consistent lighting.`;
-  return refineGeneratedImage(base64Data, 'image/jpeg', editPrompt, resolution as any);
+  return refineGeneratedImage(base64Data, 'image/jpeg', editPrompt, effectiveResolution as any);
 };
 
 export const analyzeReferenceVideo = async (videoFile: File): Promise<import('../types').VideoPromptSegment[]> => {

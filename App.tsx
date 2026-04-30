@@ -970,6 +970,7 @@ const MainApp: React.FC = () => {
           originalImage={selectedImageForVariation.src}
           onGenerate={handleGenerateVariation}
           isLoading={isLoading}
+          category={activeCategory}
         />
       )}
       {selectedImageForVideo && (
