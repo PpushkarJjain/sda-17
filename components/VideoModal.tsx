@@ -23,6 +23,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
     // New Input State
     const [templateCustomPrompt, setTemplateCustomPrompt] = useState('');
     const [referenceAdditionalDetails, setReferenceAdditionalDetails] = useState('');
+    const [customMovementPrompt, setCustomMovementPrompt] = useState('');
 
     // Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -55,20 +56,21 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
             let finalPrompt = "";
 
             if (activeTab === 'template') {
-                finalPrompt = selectedTemplate.prompt;
-                if (templateCustomPrompt.trim()) {
-                    finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                if (selectedTemplate.id === 'custom') {
+                    finalPrompt = customMovementPrompt.trim() || 'Cinematic fashion showcase with elegant movement.';
+                } else {
+                    finalPrompt = selectedTemplate.prompt;
+                    if (templateCustomPrompt.trim()) {
+                        finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                    }
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                setStatus("Analyzing Reference Video...");
-                const segments = await analyzeReferenceVideo(referenceVideo);
-                finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
-                if (referenceAdditionalDetails.trim()) {
-                    finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
-                }
+                // Use only the user's manual prompt input (Video Prompt)
+                finalPrompt = referenceAdditionalDetails.trim() || 'Cinematic fashion showcase with natural movement.';
             }
 
-            const result = await generateFashionVideo(category as 'saree' | 'kurti' | 'jewelry', finalPrompt, startingImage, (s) => setStatus(s));
+            const isCustomMovement = activeTab === 'template' && selectedTemplate.id === 'custom';
+            const result = await generateFashionVideo(category as 'saree' | 'kurti' | 'jewelry', finalPrompt, startingImage, (s) => setStatus(s), isCustomMovement);
             setVideoUrl(result.url);
             setVideoResource(result.videoResource);
         } catch (e: any) {
@@ -220,6 +222,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, startingImage,
                         setCustomPrompt={setTemplateCustomPrompt}
                         additionalDetails={referenceAdditionalDetails}
                         setAdditionalDetails={setReferenceAdditionalDetails}
+                        customMovementPrompt={customMovementPrompt}
+                        setCustomMovementPrompt={setCustomMovementPrompt}
                     />
                 </div>
             </div>

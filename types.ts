@@ -84,7 +84,7 @@ export interface SavedPreset {
     designType?: string;
     hasStoneWork?: boolean;
     stoneWorkLocation?: string;
-    jewelleryLevel?: 'None' | 'Sober' | 'Medium' | 'Heavy';
+    jewelleryLevel?: 'Keep As Is' | 'Sober' | 'Medium' | 'Heavy';
     hasBindi?: boolean;
     // Kurti
     kurtiSubCategory?: 'kurti' | 'suit';
