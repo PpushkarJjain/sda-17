@@ -35,7 +35,7 @@ interface CommonControlsProps {
   setAspectRatio: (val: string) => void;
   additionalDetails: string;
   setAdditionalDetails: (val: string) => void;
-  jewelryMode?: 'model' | 'product'; // Optional, only for Jewelry
+  viewMode?: 'model' | 'product'; // For categories that support model/product toggle
 }
 
 const categoryPoses: Record<string, string[]> = {
@@ -86,6 +86,15 @@ const categoryPoses: Record<string, string[]> = {
     'Macro Detail (Gem Focus)',
     'Match Reference Composition',
     'Custom Composition'
+  ],
+  saree_product: [
+    'Flat Lay (Full Spread)',
+    'Draped on Mannequin (Headless)',
+    'Folded Display (Stack)',
+    'Hanging Display',
+    'Half-Draped (Artistic)',
+    'Match Reference Composition',
+    'Custom Composition'
   ]
 };
 
@@ -128,6 +137,14 @@ const categoryBackgrounds: Record<string, string[]> = {
     'Soft Beige/Nude Tone',
     'Wooden Texture',
     'Solid White (E-commerce)'
+  ],
+  saree_product: [
+    'Luxury Silk/Velvet Surface',
+    'White Marble Surface',
+    'Solid White (E-commerce)',
+    'Wooden Texture',
+    'Soft Pastel Gradient',
+    'Rich Fabric Backdrop'
   ]
 };
 
@@ -161,13 +178,15 @@ const CommonControls: React.FC<CommonControlsProps> = ({
   setAspectRatio,
   additionalDetails,
   setAdditionalDetails,
-  jewelryMode
+  viewMode
 }) => {
   
   // Determine the correct key for poses/backgrounds
   let categoryKey = activeCategory as string;
   if (activeCategory === 'jewelry') {
-      categoryKey = jewelryMode === 'product' ? 'jewelry_product' : 'jewelry_model';
+      categoryKey = viewMode === 'product' ? 'jewelry_product' : 'jewelry_model';
+  } else if (activeCategory === 'saree') {
+      categoryKey = viewMode === 'product' ? 'saree_product' : 'saree';
   }
 
   const currentPoses = categoryPoses[categoryKey] || categoryPoses['saree'];
@@ -184,13 +203,14 @@ const CommonControls: React.FC<CommonControlsProps> = ({
   // Determine Reference Image Label
   let referenceLabel = "Style Reference Image";
   let referenceDesc = "For pose, lighting, or background style. The AI will NOT copy the garment from this image.";
+  const isProductMode = viewMode === 'product' && (activeCategory === 'jewelry' || activeCategory === 'saree');
   
-  if (activeCategory === 'jewelry' && jewelryMode === 'product') {
+  if (isProductMode) {
       referenceLabel = "Composition / Lighting Reference";
       referenceDesc = "Upload a photo to mimic its lighting, angle, or background texture. (AI will not copy the product itself).";
   }
 
-  const showIdentityLock = !(activeCategory === 'jewelry' && jewelryMode === 'product');
+  const showIdentityLock = !isProductMode;
 
   return (
     <>
@@ -248,7 +268,7 @@ const CommonControls: React.FC<CommonControlsProps> = ({
                         <div className="mb-4">
                             <div className="flex justify-between items-center mb-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                    {activeCategory === 'jewelry' && jewelryMode === 'product' ? "Composition & Angle" : "Pose Description"}
+                                    {isProductMode ? "Composition & Angle" : "Pose Description"}
                                 </label>
                                 <button
                                     onClick={() => onCopyDescription(referenceAnalysis.pose, 'pose')}
@@ -293,12 +313,19 @@ const CommonControls: React.FC<CommonControlsProps> = ({
             <label className="block text-sm font-semibold text-gray-800 mb-2">
                 {activeTab === 'refiner' && fidelityMode === 'accurate' 
                     ? 'Pose (Locked to Repair)' 
-                    : (activeCategory === 'jewelry' && jewelryMode === 'product' ? 'Select Composition Style' : 'Select Model Poses')}
+                    : (isProductMode ? 'Select Composition Style' : 'Select Model Poses')}
+                {!(activeTab === 'refiner' && fidelityMode === 'accurate') && (
+                    <span className={`ml-2 text-xs font-medium ${selectedPoses.length >= 2 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        ({selectedPoses.length}/2 selected)
+                    </span>
+                )}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {currentPoses.map(pose => {
                 const isSelected = selectedPoses.includes(pose);
                 const isMatchRef = pose.includes('Match Reference');
+                const isDisabledByMax = selectedPoses.length >= 2 && !isSelected;
+                const isDisabled = isDisabledByMax || (activeTab === 'refiner' && fidelityMode === 'accurate');
                 
                 let buttonClass = `text-center p-2 border rounded-lg text-sm transition-colors duration-200 `;
                 
@@ -306,6 +333,8 @@ const CommonControls: React.FC<CommonControlsProps> = ({
                     buttonClass += isMatchRef 
                         ? 'bg-amber-600 text-white border-amber-600 font-semibold'
                         : 'bg-rose-600 text-white border-rose-600 font-semibold';
+                } else if (isDisabledByMax) {
+                    buttonClass += 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed';
                 } else {
                     buttonClass += isMatchRef
                         ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-300'
@@ -316,12 +345,7 @@ const CommonControls: React.FC<CommonControlsProps> = ({
                     <button
                     key={pose}
                     onClick={() => onPoseSelect(pose)}
-                    disabled={
-                        // Multi-selection rules: Max 2
-                        (selectedPoses.length >= 2 && !isSelected) ||
-                        // In Refiner-Accurate mode, clicking other poses is effectively disabled if we want it strictly locked
-                        (activeTab === 'refiner' && fidelityMode === 'accurate')
-                    }
+                    disabled={isDisabled}
                     className={buttonClass}
                     >
                     {activeTab === 'refiner' && fidelityMode === 'accurate' && isSelected ? 'Subtle Repair' : pose}

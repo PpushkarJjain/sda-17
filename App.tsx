@@ -14,6 +14,7 @@ import { PlusIcon } from './components/icons/PlusIcon';
 import { RefreshIcon } from './components/icons/RefreshIcon';
 import { VideoIcon } from './components/icons/VideoIcon';
 import VariationModal from './components/VariationModal';
+import BatchUploadModal from './components/BatchUploadModal';
 import VideoModal from './components/VideoModal';
 import VideoStudio from './components/VideoStudio';
 import SareeWorkflow from './components/workflows/SareeWorkflow';
@@ -22,6 +23,7 @@ import JewelryWorkflow from './components/workflows/JewelryWorkflow';
 import LehengaWorkflow from './components/workflows/LehengaWorkflow';
 import CommonControls from './components/CommonControls';
 import PasswordGate from './components/PasswordGate';
+import CostTracker from './components/CostTracker';
 import type { FashionCategory, SareeImage, SareeImageSet, KurtiImageSet, JewelryImageSet, LehengaImageSet, GeneratedImageItem, SavedPreset, SareeImageType, LehengaImageType } from './types';
 
 // Helper to convert base64 back to file for reconstruction
@@ -58,10 +60,16 @@ const MainApp: React.FC = () => {
     palluMeasurement: '',
     hasStoneWork: false,
     stoneWorkLocation: 'Border Only',
-    jewelleryLevel: 'None',
+    jewelleryLevel: 'Keep As Is',
     hasBindi: false,
     enableEnhancedAnalysis: false,
+    colorMatchingEnabled: false,
+    viewMode: 'model', // Default to Model Showcase
   });
+
+  // Color Matching State
+  const [colorSetImage, setColorSetImage] = useState<SareeImage | null>(null);
+  const [colorReferenceImage, setColorReferenceImage] = useState<SareeImage | null>(null);
 
   // Kurti State
   const [kurtiImages, setKurtiImages] = useState<KurtiImageSet>({
@@ -102,6 +110,7 @@ const MainApp: React.FC = () => {
   const [refinerModelPhoto, setRefinerModelPhoto] = useState<SareeImage | null>(null);
   const [refinerSareeDetail, setRefinerSareeDetail] = useState<SareeImage | null>(null);
   const [fidelityMode, setFidelityMode] = useState<'accurate' | 'marketing'>('accurate');
+  const [refinerViewMode, setRefinerViewMode] = useState<'model' | 'product'>('model');
   const [modelDescription, setModelDescription] = useState<string>('Professional Indian model, mid-20s, elegant features');
 
   // --- Shared Config State ---
@@ -138,6 +147,7 @@ const MainApp: React.FC = () => {
   const [selectedImageForVariation, setSelectedImageForVariation] = useState<{ src: string, index: number } | null>(null);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [selectedImageForVideo, setSelectedImageForVideo] = useState<string | null>(null);
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
 
   // Presets State
   const [presets, setPresets] = useState<SavedPreset[]>([]);
@@ -218,13 +228,19 @@ const MainApp: React.FC = () => {
     setReferenceAnalysis(null);
     setError(null);
     try {
-      const analysis = await analyzeReferenceImage(referenceImage.file, activeCategory, jewelryConfig.viewMode);
+      const currentViewMode = activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
+                               activeCategory === 'saree' ? sareeConfig.viewMode : undefined;
+      const analysis = await analyzeReferenceImage(referenceImage.file, activeCategory, currentViewMode);
       setReferenceAnalysis(analysis);
 
       // Auto-apply generated descriptions
       if (analysis.pose) {
         setCustomPose(analysis.pose);
-        setSelectedPoses(['Custom Pose']);
+        // Use the correct pose name based on current view mode
+        const isCurrentlyProductMode = 
+          (activeCategory === 'saree' && sareeConfig.viewMode === 'product') ||
+          (activeCategory === 'jewelry' && jewelryConfig.viewMode === 'product');
+        setSelectedPoses([isCurrentlyProductMode ? 'Custom Composition' : 'Custom Pose']);
       }
       if (analysis.background) {
         setCustomBackground(analysis.background);
@@ -390,7 +406,7 @@ const MainApp: React.FC = () => {
         ...prev,
         palluStyle: c.palluStyle || prev.palluStyle, palluMeasurement: c.palluMeasurement || '',
         designType: c.designType || prev.designType, hasStoneWork: c.hasStoneWork || false,
-        stoneWorkLocation: c.stoneWorkLocation || 'Border Only', jewelleryLevel: c.jewelleryLevel || 'None',
+        stoneWorkLocation: c.stoneWorkLocation || 'Border Only', jewelleryLevel: c.jewelleryLevel || 'Keep As Is',
         hasBindi: c.hasBindi || false, enableEnhancedAnalysis: c.enableEnhancedAnalysis || false
       }));
       setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: c.enableEnhancedRealism || false }));
@@ -440,6 +456,7 @@ const MainApp: React.FC = () => {
     if (selectedPoses.includes('Match Reference Pose') && !referenceImage) { setError('Upload "Style Reference Image" for matching pose.'); return; }
     if (selectedPoses.includes('Custom Pose') && !customPose.trim()) { setError('Describe the custom pose.'); return; }
     if (background === 'Custom...' && !customBackground.trim()) { setError('Enter custom background description.'); return; }
+    if (activeCategory === 'saree' && sareeConfig.colorMatchingEnabled && !colorReferenceImage) { setError('Please upload a "Scene Layout Reference" image for Color Matching mode.'); return; }
 
     if (generatedImages.length > 0) setLastBatch(generatedImages);
     setIsLoading(true); setError(null); setGeneratedImages([]);
@@ -462,7 +479,12 @@ const MainApp: React.FC = () => {
 
         setLoadingStage('Generating models...');
         const generationPromises = selectedPoses.map(pose => {
-          let poseDescription = pose === 'Custom Pose' ? customPose : (pose === 'Match Reference Pose' ? "Strictly replicate posture from Style Reference Image" : pose);
+          let poseDescription = pose;
+          if (pose === 'Custom Pose' || pose === 'Custom Composition') {
+            poseDescription = customPose || pose; // Use customPose text, fallback to pose name
+          } else if (pose === 'Match Reference Pose' || pose === 'Match Reference Composition') {
+            poseDescription = "Strictly replicate the composition, angle, and posture from the Style Reference Image";
+          }
 
           const coreConfig = {
             poseDescription: `${poseDescription}, in a ${backgroundDescription} setting`,
@@ -471,7 +493,7 @@ const MainApp: React.FC = () => {
           };
 
           const categoryConfig = {
-            saree: { ...sareeConfig, analyzedTextureDescription: textureDescription },
+            saree: { ...sareeConfig, analyzedTextureDescription: textureDescription, colorSetImage, colorReferenceImage },
             kurti: kurtiConfig,
             jewelry: { ...jewelryConfig, analyzedProductDescription: jewelryAnalysis },
             lehenga: lehengaConfig
@@ -487,15 +509,22 @@ const MainApp: React.FC = () => {
         const genFunc = async (p: string) => studioRefiner(refinerModelPhoto!.file, refinerSareeDetail?.file || null, {
           category: activeCategory, fidelityMode, pose: p, background: backgroundDescription,
           visualStyle, resolution, aspectRatio, modelDescription,
-          additionalDetails: `${additionalDetails}. Jewellery: ${sareeConfig.jewelleryLevel}. Bindi: ${sareeConfig.hasBindi ? 'Yes' : 'No'}.`
+          additionalDetails: `${additionalDetails}. Jewellery: ${sareeConfig.jewelleryLevel}. Bindi: ${sareeConfig.hasBindi ? 'Yes' : 'No'}.`,
+          viewMode: refinerViewMode
         });
 
         if (fidelityMode === 'accurate') {
-          const res = await genFunc("Subtle posture repair");
+          const accuratePrompt = refinerViewMode === 'product' ? "Subtle enhancement and cleanup" : "Subtle posture repair";
+          const res = await genFunc(accuratePrompt);
           setGeneratedImages([{ current: res, history: [] }]);
         } else {
           const results = await Promise.all(selectedPoses.map(p => {
-            let pd = p === 'Custom Pose' ? customPose : (p === 'Match Reference Pose' ? "Strictly replicate posture" : p);
+            let pd = p;
+            if (p === 'Custom Pose' || p === 'Custom Composition') {
+              pd = customPose || p;
+            } else if (p === 'Match Reference Pose' || p === 'Match Reference Composition') {
+              pd = "Strictly replicate the composition, angle, and posture from the Style Reference Image";
+            }
             return genFunc(pd);
           }));
           setGeneratedImages(results.map(url => ({ current: url, history: [] })));
@@ -532,9 +561,20 @@ const MainApp: React.FC = () => {
     setIsLoading(true); setLoadingStage('Creating variation...'); setError(null);
     try {
       const result = await generateVariation(
-        selectedImageForVariation.src, sareeImages, config, additionalDetails, visualStyle,
-        resolution, aspectRatio, sareeConfig.palluStyle, sareeConfig.designType,
-        sareeConfig.palluMeasurement, sareeConfig.hasStoneWork, sareeConfig.stoneWorkLocation
+        selectedImageForVariation.src,
+        activeCategory,
+        { saree: sareeImages, kurti: kurtiImages, jewelry: jewelryImages, lehenga: lehengaImages },
+        config,
+        additionalDetails,
+        visualStyle,
+        resolution,
+        aspectRatio,
+        {
+          saree: sareeConfig,
+          kurti: kurtiConfig,
+          jewelry: jewelryConfig,
+          lehenga: lehengaConfig
+        }
       );
       setGeneratedImages(prev => [...prev, { current: result, history: [] }]);
       setVariationModalOpen(false);
@@ -560,6 +600,42 @@ const MainApp: React.FC = () => {
 
   const handleUndoBatch = useCallback(() => { if (lastBatch) { setGeneratedImages(lastBatch); setLastBatch(null); } }, [lastBatch]);
 
+  // --- Batch Upload Handler ---
+  const handleBatchApply = useCallback((assignments: Record<string, File>) => {
+    const imageUpdates: Record<string, { file: File; previewUrl: string }> = {};
+    let referenceFile: File | null = null;
+
+    Object.entries(assignments).forEach(([slotId, file]) => {
+      if (slotId === 'reference') {
+        referenceFile = file;
+      } else {
+        imageUpdates[slotId] = { file, previewUrl: URL.createObjectURL(file) };
+      }
+    });
+
+    // Apply to the correct category in one batch
+    if (activeCategory === 'saree') {
+      setSareeImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'kurti') {
+      setKurtiImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'lehenga') {
+      setLehengaImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'jewelry') {
+      setJewelryImages(prev => ({ ...prev, ...imageUpdates }));
+    }
+
+    if (referenceFile) {
+      setReferenceImage({ file: referenceFile, previewUrl: URL.createObjectURL(referenceFile) });
+      setReferenceAnalysis(null);
+    }
+
+    // Clear generated results once (not per-file)
+    setGeneratedImages([]);
+    setLastBatch(null);
+    setError(null);
+    setBatchModalOpen(false);
+  }, [activeCategory]);
+
   const handleResetForm = useCallback(() => {
     setSareeImages({ fullSaree: null, border: null, pallu: null, skirt: null, blouse: null, embroidery: null });
     setKurtiImages({ frontView: null, bottoms: null, fabricDetail: null, dupatta: null, secondaryFabricDetail: null });
@@ -572,7 +648,8 @@ const MainApp: React.FC = () => {
     setAdditionalDetails(''); setGeneratedImages([]); setLastBatch(null); setError(null);
     setSelectedPresetId(''); setLockRefIdentity(false);
     // Reset configs
-    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'None', hasBindi: false, enableEnhancedAnalysis: false }));
+    setSareeConfig(prev => ({ ...prev, palluMeasurement: '', hasStoneWork: false, stoneWorkLocation: 'Border Only', jewelleryLevel: 'Keep As Is', hasBindi: false, enableEnhancedAnalysis: false, colorMatchingEnabled: false, viewMode: 'model' }));
+    setColorSetImage(null); setColorReferenceImage(null);
     setJewelryConfig(prev => ({ ...prev, enableEnhancedRealism: false, viewMode: 'model' }));
     setLehengaConfig(prev => ({ ...prev, enableEnhancedRealism: false }));
     setKurtiConfig(prev => ({ ...prev, subCategory: 'kurti', enableEnhancedRealism: false }));
@@ -650,7 +727,14 @@ const MainApp: React.FC = () => {
                             const c = cat as FashionCategory;
                             setActiveCategory(c);
                             // Smart pose reset on category switch
-                            if (c === 'saree') setSelectedPoses(['Standing Gracefully']);
+                            if (c === 'saree') {
+                              // Respect the current saree viewMode
+                              if (sareeConfig.viewMode === 'product') {
+                                setSelectedPoses(['Flat Lay (Full Spread)']);
+                              } else {
+                                setSelectedPoses(['Standing Gracefully']);
+                              }
+                            }
                             else if (c === 'kurti') setSelectedPoses(['Standing Casual']);
                             else if (c === 'lehenga') setSelectedPoses(['Bridal Standing (Royal)']);
                             else if (c === 'jewelry') {
@@ -709,12 +793,40 @@ const MainApp: React.FC = () => {
 
                 {activeTab === 'draping' && (
                   <>
+                    {/* Batch Upload Button */}
+                    <button
+                      onClick={() => setBatchModalOpen(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 mb-2 bg-gradient-to-r from-indigo-50 to-rose-50 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-700 font-semibold text-sm hover:from-indigo-100 hover:to-rose-100 hover:border-indigo-300 transition-all duration-200 group"
+                    >
+                      <svg className="w-5 h-5 text-indigo-500 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Batch Upload Photos
+                      <span className="text-xs font-normal text-indigo-400 hidden sm:inline">— upload multiple & assign at once</span>
+                    </button>
                     {activeCategory === 'saree' && (
                       <SareeWorkflow
                         images={sareeImages}
                         config={sareeConfig}
                         onImageChange={handleSareeFileSelect}
-                        onConfigChange={(updates) => setSareeConfig(prev => ({ ...prev, ...updates }))}
+                        onConfigChange={(updates) => {
+                          setSareeConfig(prev => {
+                            const newConfig = { ...prev, ...updates };
+                            // Intercept View Mode Toggle to auto-switch poses
+                            if (updates.viewMode && updates.viewMode !== prev.viewMode) {
+                              if (updates.viewMode === 'product') {
+                                setSelectedPoses(['Flat Lay (Full Spread)']);
+                              } else {
+                                setSelectedPoses(['Standing Gracefully']);
+                              }
+                            }
+                            return newConfig;
+                          });
+                        }}
+                        colorSetImage={colorSetImage}
+                        colorReferenceImage={colorReferenceImage}
+                        onColorSetChange={(file) => setColorSetImage(file ? { file, previewUrl: URL.createObjectURL(file) } : null)}
+                        onColorReferenceChange={(file) => setColorReferenceImage(file ? { file, previewUrl: URL.createObjectURL(file) } : null)}
                       />
                     )}
                     {activeCategory === 'kurti' && (
@@ -759,8 +871,30 @@ const MainApp: React.FC = () => {
 
                 {activeTab === 'refiner' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* Refiner View Mode Toggle */}
+                    <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex">
+                      <button 
+                        onClick={() => setRefinerViewMode('model')} 
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${refinerViewMode === 'model' ? 'bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        <span className="font-bold text-sm">Model Photo</span>
+                        <span className="text-[10px] opacity-70">Refine Human Model Shot</span>
+                      </button>
+                      <button 
+                        onClick={() => setRefinerViewMode('product')} 
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-lg transition-all ${refinerViewMode === 'product' ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        <span className="font-bold text-sm">Product Photo</span>
+                        <span className="text-[10px] opacity-70">Refine Product Shot (No Model)</span>
+                      </button>
+                    </div>
+
                     <div className="bg-rose-50 p-4 border border-rose-200 rounded-xl shadow-sm">
-                      <ImageUploadSlot title="Primary Model Photo" description="Existing photo of a model wearing the garment you want to refine." isRequired={true} currentImage={refinerModelPhoto} onFileSelect={(file) => setRefinerModelPhoto(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} />
+                      <ImageUploadSlot 
+                        title={refinerViewMode === 'product' ? "Primary Product Photo" : "Primary Model Photo"} 
+                        description={refinerViewMode === 'product' ? "Existing product photography image you want to refine and enhance." : "Existing photo of a model wearing the garment you want to refine."} 
+                        isRequired={true} currentImage={refinerModelPhoto} onFileSelect={(file) => setRefinerModelPhoto(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} 
+                      />
                     </div>
                     <div className="bg-indigo-50/50 p-4 border border-indigo-100 rounded-xl">
                       <ImageUploadSlot title={activeCategory === 'jewelry' ? "Macro Detail / Gemstone Close-up" : "Garment Detail / Swatch"} description={activeCategory === 'jewelry' ? "High-res shot of the gems/metal to ensure sparkle accuracy." : "Optional high-res close-up of the border or pattern to anchor texture accuracy."} isRequired={false} currentImage={refinerSareeDetail} onFileSelect={(file) => setRefinerSareeDetail(file ? { file, previewUrl: URL.createObjectURL(file) } : null)} />
@@ -773,13 +907,15 @@ const MainApp: React.FC = () => {
                           <button onClick={() => setFidelityMode('marketing')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${fidelityMode === 'marketing' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Marketing</button>
                         </div>
                       </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Persistent Model Description</label>
-                          {syncModelSuccess && <span className="text-[10px] text-green-600 font-bold animate-pulse">Synced from Reference Image!</span>}
+                      {refinerViewMode === 'model' && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Persistent Model Description</label>
+                            {syncModelSuccess && <span className="text-[10px] text-green-600 font-bold animate-pulse">Synced from Reference Image!</span>}
+                          </div>
+                          <textarea value={modelDescription} onChange={(e) => setModelDescription(e.target.value)} placeholder="e.g., Professional Indian model, elegant features, mid-20s..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-rose-500 text-sm h-24 shadow-inner" />
                         </div>
-                        <textarea value={modelDescription} onChange={(e) => setModelDescription(e.target.value)} placeholder="e.g., Professional Indian model, elegant features, mid-20s..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-rose-500 text-sm h-24 shadow-inner" />
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -815,7 +951,9 @@ const MainApp: React.FC = () => {
                   setAspectRatio={setAspectRatio}
                   additionalDetails={additionalDetails}
                   setAdditionalDetails={setAdditionalDetails}
-                  jewelryMode={jewelryConfig.viewMode} // Passing the mode here
+                  viewMode={activeTab === 'refiner' ? refinerViewMode :
+                            activeCategory === 'jewelry' ? jewelryConfig.viewMode : 
+                            activeCategory === 'saree' ? sareeConfig.viewMode : undefined}
                 />
 
                 <div className="p-4 bg-rose-100/60 border border-rose-200 rounded-lg text-sm text-rose-800 mt-6">
@@ -881,6 +1019,7 @@ const MainApp: React.FC = () => {
           originalImage={selectedImageForVariation.src}
           onGenerate={handleGenerateVariation}
           isLoading={isLoading}
+          category={activeCategory}
         />
       )}
       {selectedImageForVideo && (
@@ -891,6 +1030,13 @@ const MainApp: React.FC = () => {
           category={activeCategory}
         />
       )}
+      <BatchUploadModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        category={activeCategory}
+        onApply={handleBatchApply}
+      />
+      <CostTracker />
     </div>
   );
 };

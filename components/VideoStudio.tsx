@@ -3,7 +3,7 @@ import ImageUploadSlot from './ImageUploadSlot';
 import { SareeImage, FashionCategory, VideoProvider, KlingCameraControl, KlingDuration, VideoPromptSegment } from '../types';
 import VideoControls, { categoryTemplates, VideoTemplate } from './VideoControls';
 import { analyzeReferenceVideo, generateFashionVideo, extendFashionVideo } from '../services/geminiService';
-import { generateKlingVideo, extendKlingVideo, isKlingAvailable, type KlingVideoConfig } from '../services/klingService';
+import { generateKlingVideo, extendKlingVideo, isKlingAvailable, uploadVideoToTempHost, type KlingVideoConfig } from '../services/klingService';
 import { FilmIcon } from './icons/FilmIcon';
 import { PlayIcon } from './icons/PlayIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
@@ -28,6 +28,7 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     // New Input State
     const [templateCustomPrompt, setTemplateCustomPrompt] = useState('');
     const [referenceAdditionalDetails, setReferenceAdditionalDetails] = useState('');
+    const [customMovementPrompt, setCustomMovementPrompt] = useState('');
 
     // Provider State
     const [videoProvider, setVideoProvider] = useState<VideoProvider>('gemini');
@@ -37,6 +38,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
     const [klingWithAudio, setKlingWithAudio] = useState(false);
     const [klingMotionControlEnabled, setKlingMotionControlEnabled] = useState(false);
     const [klingCharacterOrientation, setKlingCharacterOrientation] = useState<'image' | 'video'>('image');
+    const [motionVideoSource, setMotionVideoSource] = useState<'auto' | 'url'>('auto');
+    const [motionVideoUrl, setMotionVideoUrl] = useState('');
 
     // Reference Prompt Generation State
     const [isAnalyzingRef, setIsAnalyzingRef] = useState(false);
@@ -93,23 +96,18 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
             let finalPrompt = "";
 
             if (activeTab === 'template') {
-                finalPrompt = selectedTemplate.prompt;
-                if (templateCustomPrompt.trim()) {
-                    finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                if (selectedTemplate.id === 'custom') {
+                    finalPrompt = customMovementPrompt.trim() || 'Cinematic fashion showcase with elegant movement.';
+                } else {
+                    finalPrompt = selectedTemplate.prompt;
+                    if (templateCustomPrompt.trim()) {
+                        finalPrompt += `. ${templateCustomPrompt.trim()}`;
+                    }
                 }
             } else if (activeTab === 'reference' && referenceVideo) {
-                // Use the first segment prompt if already analyzed, otherwise analyze now
-                if (refPromptSegments.length > 0) {
-                    finalPrompt = refPromptSegments[0].prompt;
-                } else {
-                    setStatus("Analyzing Reference Video...");
-                    const segments = await analyzeReferenceVideo(referenceVideo);
-                    setRefPromptSegments(segments);
-                    finalPrompt = segments[0]?.prompt || 'Cinematic fashion showcase.';
-                }
-                if (referenceAdditionalDetails.trim()) {
-                    finalPrompt += `. User Instruction: ${referenceAdditionalDetails.trim()}`;
-                }
+                // Use only the user's manual prompt input (Additional Details / Video Prompt)
+                // The "Generate Prompt from Reference" feature is a copy-only helper — not auto-fed
+                finalPrompt = referenceAdditionalDetails.trim() || 'Cinematic fashion showcase with natural movement.';
             }
 
             // Convert source image to base64
@@ -128,18 +126,24 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                     aspectRatio: '9:16',
                     cameraControl: klingCameraControl,
                     withAudio: klingWithAudio,
+                    customMovement: activeTab === 'template' && selectedTemplate.id === 'custom',
                 };
 
-                // Motion Control: send reference video directly to Kling
+                // Motion Control: upload reference video to get a public URL for Kling
                 if (activeTab === 'reference' && referenceVideo && klingMotionControlEnabled) {
-                    setStatus('Preparing reference video for motion control...');
-                    const videoReader = new FileReader();
-                    videoReader.readAsDataURL(referenceVideo);
-                    const videoDataUrl = await new Promise<string>((resolve) => {
-                        videoReader.onload = () => resolve(videoReader.result as string);
-                    });
+                    let videoUrl: string;
+
+                    if (motionVideoSource === 'url' && motionVideoUrl.trim()) {
+                        // User-provided URL
+                        videoUrl = motionVideoUrl.trim();
+                        setStatus('Using provided video URL for motion control...');
+                    } else {
+                        // Auto-upload to temporary host
+                        videoUrl = await uploadVideoToTempHost(referenceVideo, (s) => setStatus(s));
+                    }
+
                     klingConfig.motionControl = {
-                        videoDataUrl,
+                        videoUrl,
                         characterOrientation: klingCharacterOrientation,
                     };
                     // Use a minimal prompt when motion control is active (video drives the motion)
@@ -167,8 +171,8 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                 };
                 setHistory(prev => [newEntry, ...prev]);
             } else {
-                // --- Gemini Veo generation ---
-                const result = await generateFashionVideo(category, finalPrompt, base64Image, (s) => setStatus(s));
+                const isCustomMovement = activeTab === 'template' && selectedTemplate.id === 'custom';
+                const result = await generateFashionVideo(category, finalPrompt, base64Image, (s) => setStatus(s), isCustomMovement);
                 setCurrentVideoUrl(result.url);
                 setCurrentVideoResource(result.videoResource);
                 setCurrentKlingTaskId(null);
@@ -391,6 +395,12 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                             setKlingMotionControlEnabled={setKlingMotionControlEnabled}
                             klingCharacterOrientation={klingCharacterOrientation}
                             setKlingCharacterOrientation={setKlingCharacterOrientation}
+                            motionVideoSource={motionVideoSource}
+                            setMotionVideoSource={setMotionVideoSource}
+                            motionVideoUrl={motionVideoUrl}
+                            setMotionVideoUrl={setMotionVideoUrl}
+                            customMovementPrompt={customMovementPrompt}
+                            setCustomMovementPrompt={setCustomMovementPrompt}
                         />
                     </div>
                 </div>
@@ -428,15 +438,30 @@ const VideoStudio: React.FC<VideoStudioProps> = ({ category, onCategoryChange })
                                     </span>
                                 )}
                                 {currentVideoUrl && (
-                                    <a
-                                        href={currentVideoUrl}
-                                        download="saree_showcase.mp4"
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const response = await fetch(currentVideoUrl);
+                                                const blob = await response.blob();
+                                                const blobUrl = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = blobUrl;
+                                                a.download = `${category}_showcase.mp4`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(blobUrl);
+                                            } catch (err) {
+                                                // Fallback: open in new tab if fetch fails
+                                                window.open(currentVideoUrl, '_blank');
+                                            }
+                                        }}
                                         className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-2 px-3 sm:px-4 rounded-lg transition-colors shadow-lg"
                                     >
                                         <DownloadIcon />
                                         <span className="hidden sm:inline">Download MP4</span>
                                         <span className="sm:hidden">Save</span>
-                                    </a>
+                                    </button>
                                 )}
                             </div>
                         </div>

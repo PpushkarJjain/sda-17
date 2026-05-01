@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/kling/:path*",
+      "destination": "https://api.klingai.com/v1/:path*"
+    }
+  ]
+}

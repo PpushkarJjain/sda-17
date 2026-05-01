@@ -1,4 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
+import { logUsage } from './costTracker';
 import type { SareeImage, SareeImageSet, KurtiImageSet, JewelryImageSet, LehengaImageSet, FashionCategory } from '../types';
 import type { VariationConfig } from '../components/VariationModal';
 
@@ -154,6 +155,7 @@ export const analyzeSareeVisuals = async (sareeImages: SareeImageSet): Promise<s
       model: 'gemini-2.5-flash',
       contents: { parts: parts },
     });
+    logUsage('gemini-2.5-flash', 'analyzeSareeVisuals', response.usageMetadata);
     return response.text || "";
   } catch (error) {
     return handleApiError(error);
@@ -181,6 +183,7 @@ export const analyzeJewelryVisuals = async (jewelryImages: JewelryImageSet): Pro
       model: 'gemini-2.5-flash',
       contents: { parts: parts },
     });
+    logUsage('gemini-2.5-flash', 'analyzeJewelryVisuals', response.usageMetadata);
     return response.text || "";
   } catch (error) {
     return handleApiError(error);
@@ -195,6 +198,7 @@ export interface VirtualTryOnConfig {
   aspectRatio: string;
   referenceImage: SareeImage | null;
   lockIdentity: boolean;
+  previousResultBase64?: string; // Base64 data URL of a previously generated image for visual continuity
 }
 
 export interface SareeConfig {
@@ -206,6 +210,10 @@ export interface SareeConfig {
   stoneWorkLocation: string;
   jewelleryLevel: string;
   hasBindi: boolean;
+  colorMatchingEnabled: boolean;
+  colorSetImage?: SareeImage | null;
+  colorReferenceImage?: SareeImage | null;
+  viewMode: 'model' | 'product';
 }
 
 export interface KurtiConfig {
@@ -250,7 +258,7 @@ export const generateVirtualTryOn = async (
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
 
-  let modelName = 'gemini-2.5-flash-image';
+  let modelName = 'gemini-3.1-flash-image-preview';
   const imageConfig: any = { aspectRatio: coreConfig.aspectRatio || '3:4' };
 
   const isProResolution = coreConfig.resolution === 'High' || coreConfig.resolution === 'Ultra HD';
@@ -310,37 +318,157 @@ export const generateVirtualTryOn = async (
 
   if (category === 'saree' && assets.saree && categoryConfig.saree) {
     const cfg = categoryConfig.saree;
-    prompt += `Generate a lifelike female model.\n`; // Explicitly request model for Saree
 
-    // Jewellery Instruction
-    let jewelleryInstruction = "";
-    if (cfg.jewelleryLevel !== 'None') {
-      jewelleryInstruction = `**JEWELLERY STYLING (${cfg.jewelleryLevel.toUpperCase()} INTENSITY):**\n`;
-      if (cfg.jewelleryLevel === 'Sober') {
-        jewelleryInstruction += `- Style: Minimal, elegant, daily wear.\n- Items: Small earrings (studs/drops), thin delicate chain or necklace, simple bangles.\n- Vibe: Sophisticated and understated.`;
-      } else if (cfg.jewelleryLevel === 'Medium') {
-        jewelleryInstruction += `- Style: Balanced traditional, festive wear.\n- Items: Statement earrings (Jhumkas/Chandbalis), layered necklace, set of bangles, small Maang Tikka.\n- Vibe: Semi-bridal or grand party look.`;
-      } else if (cfg.jewelleryLevel === 'Heavy') {
-        jewelleryInstruction += `- Style: Grand Bridal / Royal Heritage.\n- Items: Heavy choker + long necklace (Rani Haar), large earrings, full bangle set, Maang Tikka, Nose ring (Nath), Waist belt (Kamarbandh).\n- Vibe: Opulent wedding look.`;
+    // === COLOR MATCHING MODE ===
+    if (cfg.colorMatchingEnabled && cfg.colorReferenceImage) {
+      prompt = `Generate a professional saree product display image.
+
+**COMPOSITION (from [Layout Reference Image]):**
+- Use the [Layout Reference Image] ONLY for the **spatial arrangement and layout** of elements.
+- Replicate how the main saree and color variants are positioned relative to each other.
+- DO NOT copy the model type, pose, background, or lighting from the layout reference — those come from user instructions below.
+
+**ZONE 1 - MAIN SAREE (Left/Primary Area):**
+- Drape the saree (from [Saree Image]) on a model/figure in the same spatial position as shown in the layout reference.
+- Preserve ALL embroidery patterns, border design, motifs, and fabric texture from the saree image.
+${cfg.analyzedTextureDescription ? `- **FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}` : ''}
+- The BASE COLOR of the main draped saree must match the dominant/primary color visible in the saree image.
+
+**ZONE 2 - COLOR VARIANTS (Right/Secondary Area):**
+- Display the same saree folded and arranged in the same spatial area as shown in the layout reference.
+${cfg.colorSetImage ? `- Render one folded/hung piece per color shown in the [Color Set Image]. Each piece must:
+  * Use the EXACT base fabric color from the color set.
+  * Maintain the SAME embroidery pattern, motifs, and border design visible in the saree image.
+- DO NOT invent new colors. Only use the colors visible in the [Color Set Image].` : '- Generate 3-4 complementary color variants of the same saree design in the display area.'}
+
+**CRITICAL CONSTRAINTS:**
+- The embroidery/motif design must be IDENTICAL across all color variants.
+- Output a SINGLE composed image containing both zones.
+`;
+
+      // Push saree images
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Saree Image] - Primary saree design, pattern, and texture reference:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
       }
-      jewelleryInstruction += `\n- **Harmony:** Jewellery metal tone (Gold/Silver/Rose Gold) MUST perfectly match the saree's Zari/Border work.`;
+      if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+
+      // Push color set image (optional)
+      if (cfg.colorSetImage) {
+        parts.push({ text: '[Image: Color Set Image] - All available color variants of this saree:' });
+        parts.push(await fileToGenerativePart(cfg.colorSetImage.file, genMaxDim));
+      }
+
+      // Push layout reference image (required)
+      parts.push({ text: '[Image: Layout Reference Image] - Scene composition and display layout to replicate:' });
+      parts.push(await fileToGenerativePart(cfg.colorReferenceImage.file, genMaxDim));
+
+    } else if (cfg.viewMode === 'product') {
+      // === SAREE PRODUCT PHOTOGRAPHY MODE ===
+      prompt += `**CORE OBJECTIVE:** Professional Saree Product Photography.
+          **TASK:** Render the saree in a high-end commercial product display format.
+          **CONSTRAINT:** NO HUMAN MODEL. NO SKIN. Focus entirely on the saree fabric, its draping on the display surface/mannequin, texture details, and the visual presentation.
+          **CONTEXT:** ${coreConfig.poseDescription}
+          `;
+
+      let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
+      let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
+      let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
+
+      prompt += `${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}`;
+
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Full Saree] - The complete saree fabric. Use this as the PRIMARY source for saree design, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      }
+      if (assets.saree.border) {
+        parts.push({ text: '[Image: Saree Border Close-up] - Detailed border design to replicate accurately:' });
+        parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      }
+      if (assets.saree.pallu) {
+        parts.push({ text: '[Image: Saree Pallu Close-up] - Pallu section design to replicate:' });
+        parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      }
+      if (assets.saree.skirt) {
+        parts.push({ text: '[Image: Saree Skirt Portion] - Main drape portion detail:' });
+        parts.push(await fileToGenerativePart(assets.saree.skirt.file, genMaxDim));
+      }
+      if (assets.saree.blouse) {
+        parts.push({ text: '[Image: Blouse Piece Fabric] - The BLOUSE fabric/design. The model\'s blouse MUST use this exact fabric, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.blouse.file, genMaxDim));
+      }
+      if (assets.saree.embroidery) {
+        parts.push({ text: '[Image: Embroidery/Design Detail] - Close-up embellishment detail to preserve:' });
+        parts.push(await fileToGenerativePart(assets.saree.embroidery.file, genMaxDim));
+      }
+
     } else {
-      jewelleryInstruction = `**JEWELLERY:** Keep jewellery minimal or non-existent unless visible in the reference image.`;
+      // === STANDARD SAREE DRAPING MODE (MODEL) ===
+      prompt += `Generate a lifelike female model.\n`; // Explicitly request model for Saree
+
+      // Jewellery Instruction
+      let jewelleryInstruction = "";
+      if (cfg.jewelleryLevel !== 'Keep As Is') {
+        jewelleryInstruction = `**JEWELLERY STYLING (${cfg.jewelleryLevel.toUpperCase()} INTENSITY):**\n`;
+        if (cfg.jewelleryLevel === 'Sober') {
+          jewelleryInstruction += `- Style: Minimal, elegant, daily wear.\n- Items: Small earrings (studs/drops), thin delicate chain or necklace, simple bangles.\n- Vibe: Sophisticated and understated.`;
+        } else if (cfg.jewelleryLevel === 'Medium') {
+          jewelleryInstruction += `- Style: Balanced traditional, festive wear.\n- Items: Statement earrings (Jhumkas/Chandbalis), layered necklace, set of bangles, small Maang Tikka.\n- Vibe: Semi-bridal or grand party look.`;
+        } else if (cfg.jewelleryLevel === 'Heavy') {
+          jewelleryInstruction += `- Style: Grand Bridal / Royal Heritage.\n- Items: Heavy choker + long necklace (Rani Haar), large earrings, full bangle set, Maang Tikka, Nose ring (Nath), Waist belt (Kamarbandh).\n- Vibe: Opulent wedding look.`;
+        }
+        jewelleryInstruction += `\n- **Harmony:** Jewellery metal tone (Gold/Silver/Rose Gold) MUST perfectly match the saree's Zari/Border work.`;
+      } else {
+        jewelleryInstruction = `**JEWELLERY (KEEP AS IS):** Retain ALL jewellery and accessories EXACTLY as they appear on the model in the reference image. Do NOT add, remove, or modify any jewellery items. Preserve their exact type, placement, size, and styling.`;
+      }
+
+      if (cfg.hasBindi) {
+        jewelleryInstruction += `\n- **Face Detail:** Apply a traditional Bindi on the forehead suited to the face shape.`;
+      }
+
+      let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
+      let designTypeInstruction = cfg.designType.includes("Panel Design") ? `**SURFACE EMBELLISHMENT: PANEL DESIGN (HEAVY BOTTOM BORDER)** Ensure the heavy embroidery or premium design is concentrated exclusively on the bottom skirt border near the feet, while the top and side borders remain thin and minimal.` : (cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`)));
+      let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
+
+      // Blouse instruction (only if blouse image is provided)
+      let blouseInstruction = '';
+      if (assets.saree.blouse) {
+        blouseInstruction = `\n**BLOUSE INSTRUCTION (CRITICAL):**
+- The model's BLOUSE must be made from the EXACT fabric shown in the [Blouse Piece Fabric] image.
+- Match the blouse's COLOR, PATTERN, TEXTURE, and DESIGN exactly from that image.
+- Do NOT auto-generate a blouse color. Do NOT match the blouse to the saree color.
+- Do NOT copy blouse design from the Style Reference Image.
+- The blouse fabric source is STRICTLY the [Blouse Piece Fabric] input image.`;
+      }
+
+      prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}${blouseInstruction}`;
+
+      if (assets.saree.fullSaree) {
+        parts.push({ text: '[Image: Full Saree] - The complete saree fabric. Use this as the PRIMARY source for saree design, color, and pattern:' });
+        parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
+      }
+      if (assets.saree.border) {
+        parts.push({ text: '[Image: Saree Border Close-up] - Detailed border design to replicate accurately:' });
+        parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
+      }
+      if (assets.saree.pallu) {
+        parts.push({ text: '[Image: Saree Pallu Close-up] - Pallu section design to replicate:' });
+        parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
+      }
+      if (assets.saree.skirt) {
+        parts.push({ text: '[Image: Saree Skirt Portion] - Main drape portion detail:' });
+        parts.push(await fileToGenerativePart(assets.saree.skirt.file, genMaxDim));
+      }
+      if (assets.saree.blouse) {
+        parts.push({ text: '[Image: Blouse Piece Fabric] - **CRITICAL: The model\'s BLOUSE must use THIS exact fabric, color, and pattern. Do NOT invent or match from any other source:**' });
+        parts.push(await fileToGenerativePart(assets.saree.blouse.file, genMaxDim));
+      }
+      if (assets.saree.embroidery) {
+        parts.push({ text: '[Image: Embroidery/Design Detail] - Close-up embellishment detail to preserve:' });
+        parts.push(await fileToGenerativePart(assets.saree.embroidery.file, genMaxDim));
+      }
     }
-
-    if (cfg.hasBindi) {
-      jewelleryInstruction += `\n- **Face Detail:** Apply a traditional Bindi on the forehead suited to the face shape.`;
-    }
-
-    let palluInstruction = cfg.palluStyle.includes("Rich Pallu") ? `**PALLU SPECIFICATION: RICH / GRAND ZARI PALLU** ...` : (cfg.palluStyle.includes("Box Pallu") ? `**PALLU SPECIFICATION: BOX PALLU** ...` : `**PALLU SPECIFICATION: NORMAL C-PALLU** ...`);
-    let designTypeInstruction = cfg.designType.includes("Patch Work") ? `**SURFACE EMBELLISHMENT: PATCH WORK** ...` : (cfg.designType.includes("Embroidery") ? `**SURFACE EMBELLISHMENT: EMBROIDERY** ...` : (cfg.designType.includes("Printed") ? `**SURFACE EMBELLISHMENT: PRINTED** ...` : `**SURFACE EMBELLISHMENT: WOVEN / JACQUARD** ...`));
-    let stoneWorkInstruction = cfg.hasStoneWork ? `**ADDITIONAL EMBELLISHMENT: SWAROVSKI STONE WORK (ENABLED)** ...` : `**NEGATIVE CONSTRAINT (STONE WORK DISABLED)** ...`;
-
-    prompt += `**CORE OBJECTIVE:** Dress model in specific saree.\n${cfg.analyzedTextureDescription ? `**FABRIC PHYSICS:** ${cfg.analyzedTextureDescription}\n` : ''}\n${palluInstruction}\n${designTypeInstruction}\n${stoneWorkInstruction}\n${jewelleryInstruction}`;
-
-    if (assets.saree.fullSaree) parts.push(await fileToGenerativePart(assets.saree.fullSaree.file, genMaxDim));
-    if (assets.saree.border) parts.push(await fileToGenerativePart(assets.saree.border.file, genMaxDim));
-    if (assets.saree.pallu) parts.push(await fileToGenerativePart(assets.saree.pallu.file, genMaxDim));
 
   } else if (category === 'kurti' && assets.kurti && categoryConfig.kurti) {
     const cfg = categoryConfig.kurti;
@@ -399,12 +527,22 @@ export const generateVirtualTryOn = async (
   } else if (category === 'lehenga' && assets.lehenga && categoryConfig.lehenga) {
     const cfg = categoryConfig.lehenga;
     prompt += `Generate a lifelike female model.\n`;
+    const skirtVolumeInstruction = cfg.skirtVolume === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga images and determine the exact skirt volume/silhouette (A-line, ballgown, mermaid, straight, etc.). Replicate that exact volume and shape faithfully.]'
+      : `${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape)`;
+    const drapingStyleInstruction = cfg.drapingStyle === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded lehenga/dupatta images and determine the exact dupatta draping style (pinned side, pleated, head-cover, cape, etc.). Replicate that exact draping faithfully.]'
+      : cfg.drapingStyle;
+    const blouseCutInstruction = cfg.blouseCut === 'Match Reference Image'
+      ? '[ANALYZE FROM REFERENCE IMAGES: Carefully examine the uploaded choli/blouse images and determine the exact blouse cut (sleeveless, off-shoulder, full sleeves, peplum, etc.). Replicate that exact cut and style faithfully.]'
+      : cfg.blouseCut;
+
     prompt += `**CORE OBJECTIVE:** Dress model in the provided Lehenga Choli (3-piece ethnic set).
       
       **CONSTRUCTION SPECIFICATIONS:**
-      - **Skirt Volume:** ${cfg.skirtVolume}. (If "High Volume/Can-Can", render a wide, stiff umbrella flare. If "Flowy", render soft A-line drape).
-      - **Draping Style:** ${cfg.drapingStyle}. (Dupatta placement is critical).
-      - **Blouse Cut:** ${cfg.blouseCut}.
+      - **Skirt Volume:** ${skirtVolumeInstruction}.
+      - **Draping Style:** ${drapingStyleInstruction}. (Dupatta placement is critical).
+      - **Blouse Cut:** ${blouseCutInstruction}.
       
       **STYLING RULES:**
       - **Midriff:** Unless "Long Choli" is selected, the midriff/navel area MUST be realistically visible with accurate skin texture.
@@ -561,7 +699,26 @@ export const generateVirtualTryOn = async (
     }
   }
 
+  // If a previous result is provided, instruct the AI to maintain visual continuity
+  if (coreConfig.previousResultBase64) {
+    prompt += `\n\n**VISUAL CONTINUITY (CRITICAL):**
+      A previously generated image is provided below as [PREVIOUS RESULT].
+      - Maintain the EXACT same saree/garment appearance, color, texture, and draping style as in the previous result.
+      - Change ONLY the model, pose, and/or background as instructed above.
+      - The output should look like it belongs to the same photoshoot as the previous result.`;
+  }
+
   parts.push({ text: prompt });
+
+  // Add previous result image for visual continuity
+  if (coreConfig.previousResultBase64) {
+    const [, prevData] = coreConfig.previousResultBase64.split(',');
+    if (prevData) {
+      parts.push({ text: "**[IMAGE: PREVIOUS RESULT] (MAINTAIN VISUAL CONTINUITY — same garment appearance):**" });
+      parts.push({ inlineData: { data: prevData, mimeType: 'image/jpeg' } });
+    }
+  }
+
   if (coreConfig.referenceImage) {
     parts.push({ text: "**[IMAGE: STYLE REFERENCE] (USE FOR LIGHTING/ANGLE ONLY):**" });
     parts.push(await fileToGenerativePart(coreConfig.referenceImage.file, genMaxDim));
@@ -573,6 +730,7 @@ export const generateVirtualTryOn = async (
       contents: { parts: parts },
       config: { responseModalities: [Modality.IMAGE], imageConfig: imageConfig },
     });
+    logUsage(modelName, 'generateVirtualTryOn', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -595,7 +753,8 @@ export const studioRefiner = async (
     resolution: string,
     aspectRatio: string,
     modelDescription: string,
-    additionalDetails: string
+    additionalDetails: string,
+    viewMode?: 'model' | 'product'
   }
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
@@ -603,27 +762,65 @@ export const studioRefiner = async (
   const modelName = 'gemini-3-pro-image-preview';
   const ai = new GoogleGenAI({ apiKey });
   const parts: any[] = [];
+  const isProductMode = config.viewMode === 'product';
 
   // Context-aware prompt construction
   let categoryInstruction = "";
-  if (config.category === 'jewelry') {
-    categoryInstruction = "CATEGORY: JEWELRY. Focus on high-frequency details: metallic luster, gemstone refraction, caustics, and realistic skin shadows. Maintain exact geometry.";
-  } else if (config.category === 'kurti') {
-    categoryInstruction = "CATEGORY: KURTI/ETHNIC WEAR. Focus on fabric weight, stitching details, embroidery texture, and natural cloth folds.";
-  } else if (config.category === 'lehenga') {
-    categoryInstruction = "CATEGORY: LEHENGA CHOLI. Focus on the volume of the skirt (Ghera), intricate embroidery on the blouse, and the natural fall of the dupatta. Maintain the 3-piece structure.";
+  if (isProductMode) {
+    // Product Photography Refiner
+    if (config.category === 'jewelry') {
+      categoryInstruction = "CATEGORY: JEWELRY PRODUCT PHOTOGRAPHY. Focus on metallic surface reflections, gemstone clarity, caustic lighting effects, and surface material texture. NO HUMAN elements.";
+    } else if (config.category === 'saree') {
+      categoryInstruction = "CATEGORY: SAREE PRODUCT PHOTOGRAPHY. Focus on fabric texture detail, weave pattern clarity, color accuracy, draping arrangement on the display surface, and lighting quality. NO HUMAN MODEL.";
+    } else if (config.category === 'kurti') {
+      categoryInstruction = "CATEGORY: KURTI PRODUCT PHOTOGRAPHY. Focus on fabric texture, stitching details, embroidery clarity, and garment presentation. NO HUMAN MODEL.";
+    } else {
+      categoryInstruction = "CATEGORY: LEHENGA PRODUCT PHOTOGRAPHY. Focus on fabric volume, embroidery detail, dupatta texture, and display arrangement. NO HUMAN MODEL.";
+    }
   } else {
-    categoryInstruction = "CATEGORY: SAREE. Focus on silk/zari texture sheen, pleat physics, and heavy drape realism.";
+    // Model-based Refiner (existing behavior)
+    if (config.category === 'jewelry') {
+      categoryInstruction = "CATEGORY: JEWELRY. Focus on high-frequency details: metallic luster, gemstone refraction, caustics, and realistic skin shadows. Maintain exact geometry.";
+    } else if (config.category === 'kurti') {
+      categoryInstruction = "CATEGORY: KURTI/ETHNIC WEAR. Focus on fabric weight, stitching details, embroidery texture, and natural cloth folds.";
+    } else if (config.category === 'lehenga') {
+      categoryInstruction = "CATEGORY: LEHENGA CHOLI. Focus on the volume of the skirt (Ghera), intricate embroidery on the blouse, and the natural fall of the dupatta. Maintain the 3-piece structure.";
+    } else {
+      categoryInstruction = "CATEGORY: SAREE. Focus on silk/zari texture sheen, pleat physics, and heavy drape realism.";
+    }
   }
 
-  // Note: Studio Refiner INTENTIONALLY preserves the model identity as it's assumed the user owns the source photo.
-  let basePrompt = `You are a high-end fashion retouching expert. 
-  ${categoryInstruction}
-  Mode: ${config.fidelityMode.toUpperCase()}. 
-  Style: ${config.visualStyle}. 
-  Model: ${config.modelDescription}. 
-  Bg: ${config.background}. 
-  ${config.additionalDetails}`;
+  let basePrompt: string;
+  if (isProductMode) {
+    // Product photography retouching prompt
+    basePrompt = `You are a high-end product photography retouching expert.
+    ${categoryInstruction}
+    Mode: ${config.fidelityMode.toUpperCase()}.
+    Style: ${config.visualStyle}.
+    
+    **TASK:** Retouch and enhance this PRODUCT PHOTOGRAPHY image.
+    **CONSTRAINT:** This is a product-only shot. There is NO HUMAN MODEL. Do NOT add any human elements.
+    **FOCUS AREAS:**
+    - Enhance fabric/material texture clarity and detail
+    - Improve lighting quality and surface reflections
+    - Ensure accurate, vibrant color reproduction
+    - Clean up the display surface/background
+    - Sharpen pattern and embroidery details
+    - Maintain the exact product placement and composition
+    
+    Composition: ${config.pose}.
+    Background/Surface: ${config.background}.
+    ${config.additionalDetails}`;
+  } else {
+    // Model-based retouching prompt (existing behavior)
+    basePrompt = `You are a high-end fashion retouching expert. 
+    ${categoryInstruction}
+    Mode: ${config.fidelityMode.toUpperCase()}. 
+    Style: ${config.visualStyle}. 
+    Model: ${config.modelDescription}. 
+    Bg: ${config.background}. 
+    ${config.additionalDetails}`;
+  }
 
   parts.push({ text: basePrompt });
   parts.push(await fileToGenerativePart(modelPhoto, 2048));
@@ -640,6 +837,7 @@ export const studioRefiner = async (
         }
       },
     });
+    logUsage(modelName, 'studioRefiner', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -660,7 +858,7 @@ export const refineGeneratedImage = async (
 ): Promise<string> => {
   const apiKey = getActiveApiKey();
 
-  let modelName = 'gemini-2.5-flash-image';
+  let modelName = 'gemini-3.1-flash-image-preview';
   const imageConfig: any = { aspectRatio: '3:4' }; // Default aspect ratio, though refine usually respects input. 
   // Note: For refine, we might want to preserve input aspect ratio, but the API might require one. 
   // gemini-2.5-flash-image doesn't strictly enforce aspect ratio on edit if not provided, but gemini-3-pro might.
@@ -694,6 +892,7 @@ export const refineGeneratedImage = async (
         ...(modelName === 'gemini-3-pro-image-preview' ? { imageConfig } : {})
       },
     });
+    logUsage(modelName, 'refineGeneratedImage', response.usageMetadata);
     if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -769,9 +968,18 @@ export const generateInpainting = async (
   const croppedImageBase64 = cropCanvas.toDataURL('image/jpeg', 0.95);
 
   const ai = new GoogleGenAI({ apiKey });
+  // Compute dynamic aspect ratio from crop dimensions
+  const cropAspect = cropW / cropH;
+  let inpaintAspectRatio = '1:1';
+  if (cropAspect >= 1.7) inpaintAspectRatio = '16:9';
+  else if (cropAspect >= 1.2) inpaintAspectRatio = '4:3';
+  else if (cropAspect >= 0.9) inpaintAspectRatio = '1:1';
+  else if (cropAspect >= 0.65) inpaintAspectRatio = '3:4';
+  else inpaintAspectRatio = '9:16';
+
   const parts: any[] = [
     { inlineData: { data: croppedImageBase64.split(',')[1], mimeType: 'image/jpeg' } },
-    { text: `Edit this image segment. Focus ONLY on the center area. ${prompt}. Maintain seamless edges.` }
+    { text: `Edit ONLY the painted/highlighted area in this cropped section. Preserve all surrounding details exactly as they are — do not alter unpainted regions. Match the lighting direction, color temperature, and shadow intensity of the surrounding context. ${prompt}. Ensure seamless, artifact-free blending at edges. Maintain photographic realism.` }
   ];
 
   if (referenceElement) {
@@ -784,9 +992,10 @@ export const generateInpainting = async (
     contents: { parts },
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio: "1:1" }
+      imageConfig: { aspectRatio: inpaintAspectRatio }
     }
   });
+  logUsage('gemini-3-pro-image-preview', 'generateInpainting', response.usageMetadata);
 
   if (!response.candidates || response.candidates.length === 0) throw new Error("No candidates returned. The request might have been blocked.");
 
@@ -814,36 +1023,44 @@ export const generateInpainting = async (
 export const analyzeReferenceImage = async (
   file: File,
   category: FashionCategory = 'saree',
-  jewelryMode?: 'product' | 'model'
+  viewMode?: 'product' | 'model'
 ): Promise<{ pose: string, background: string, model_attributes: string }> => {
   const apiKey = getActiveApiKey();
   const ai = new GoogleGenAI({ apiKey });
   const imagePart = await fileToGenerativePart(file, 800);
 
   let prompt = "";
+  const isProductMode = viewMode === 'product';
 
-  if (category === 'jewelry') {
-    if (jewelryMode === 'product') {
-      prompt = `Analyze this product photography image and return JSON.
-          Focus on the PHOTOGRAPHY STYLE.
-          
-          {
-            "pose": "Describe the camera angle (e.g. Macro, Top-down, 45-degree), Composition (Rule of thirds, Center), and Placement (e.g. Floating, On velvet).",
-            "background": "Describe the surface material, lighting style (e.g. Softbox, Hard rim light), and background color/texture.",
-            "model_attributes": "N/A"
-          }`;
-    } else {
-      prompt = `Analyze this fashion photography image and return JSON.
-          Focus on the MODEL and POSE.
-          
-          {
-            "pose": "Describe the model's pose and how the jewelry is displayed (e.g. Hand on cheek showing ring).",
-            "background": "Describe the scene/environment.",
-            "model_attributes": "Describe model ethnicity, skin tone, and features."
-          }`;
-    }
+  if (isProductMode) {
+    // Product photography analysis — shared across jewelry & saree product modes
+    const productContext = category === 'jewelry' ? 'jewelry product' : 'saree/garment product display';
+    prompt = `Analyze this ${productContext} photography image and return JSON.
+        Focus on the PHOTOGRAPHY STYLE.
+        
+        {
+          "pose": "Describe the camera angle (e.g. Macro, Top-down, 45-degree, Eye-level), Composition (Rule of thirds, Center, Symmetrical), and Placement/Display style (e.g. Flat lay, On mannequin, Folded, Hanging, On velvet stand).",
+          "background": "Describe the surface material, lighting style (e.g. Softbox, Hard rim light, Natural window), and background color/texture.",
+          "model_attributes": "N/A"
+        }`;
+  } else if (category === 'jewelry') {
+    prompt = `Analyze this fashion photography image and return JSON.
+        Focus on the MODEL and POSE.
+        
+        {
+          "pose": "Describe the model's pose and how the jewelry is displayed (e.g. Hand on cheek showing ring).",
+          "background": "Describe the scene/environment.",
+          "model_attributes": "Describe model ethnicity, skin tone, and features."
+        }`;
   } else {
-    prompt = `Analyze image and return JSON: { "pose": "Describe the model's pose...", "background": "Describe the scene...", "model_attributes": "Describe model features..." }`;
+    prompt = `Analyze this fashion/lifestyle image and return JSON.
+        Focus ONLY on the MODEL's physical attributes and pose. Do NOT describe the clothing or outfit.
+        
+        {
+          "pose": "Describe the model's exact body pose, stance, hand placement, head tilt, and overall posture.",
+          "background": "Describe the scene, environment, and lighting.",
+          "model_attributes": "Describe ONLY the model's physical features: ethnicity, skin tone, face shape, hair style/color, body type, and approximate age. Do NOT describe any clothing, jewelry, or accessories."
+        }`;
   }
 
   try {
@@ -852,6 +1069,7 @@ export const analyzeReferenceImage = async (
       contents: { parts: [{ text: prompt }, imagePart] },
       config: { responseMimeType: "application/json" }
     });
+    logUsage('gemini-2.5-flash', 'analyzeReferenceImage', response.usageMetadata);
     return JSON.parse(response.text.replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error) {
     return handleApiError(error);
@@ -860,57 +1078,86 @@ export const analyzeReferenceImage = async (
 
 export const generateVariation = async (
   originalImageSrc: string,
-  sareeImages: SareeImageSet,
+  category: FashionCategory,
+  allAssets: {
+    saree: SareeImageSet;
+    kurti: KurtiImageSet;
+    jewelry: JewelryImageSet;
+    lehenga: LehengaImageSet;
+  },
   config: VariationConfig,
   baseAdditionalDetails: string,
   visualStyle: string,
   resolution: string,
   aspectRatio: string,
-  palluStyle: string,
-  designType: string,
-  palluMeasurement: string,
-  hasStoneWork: boolean,
-  stoneWorkLocation: string
+  categorySpecificConfig: {
+    saree?: Partial<SareeConfig>;
+    kurti?: Partial<KurtiConfig>;
+    jewelry?: Partial<JewelryConfig>;
+    lehenga?: Partial<LehengaConfig>;
+  }
 ): Promise<string> => {
 
+  // Use the resolution from the Magic Editor selector if provided, otherwise fall back to parent
+  const effectiveResolution = config.resolution || resolution;
+
+  // PATH 1: Inpainting (mask painted)
   if (config.maskData) {
     const prompt = config.sareeEditPrompt + (config.sareeColor ? ` Change color to ${config.sareeColor}.` : "");
     return generateInpainting(originalImageSrc, config.maskData, prompt, config.elementReferenceImage);
   }
 
+  // PATH 2: New Pose/Model — regenerate with original product images + previous result for continuity
   if (config.locks.saree && !config.locks.model) {
+    const poseWithBg = !config.locks.background
+      ? `${config.pose}, in a ${config.background} setting`
+      : config.pose;
+
     return generateVirtualTryOn(
-      'saree',
-      { saree: sareeImages },
+      category,
+      allAssets,
       {
-        poseDescription: config.pose,
+        poseDescription: poseWithBg,
         additionalDetails: baseAdditionalDetails,
         visualStyle: visualStyle,
-        resolution: resolution,
-        aspectRatio: aspectRatio,
+        resolution: effectiveResolution,
+        aspectRatio: config.aspectRatio || aspectRatio,
         referenceImage: config.referenceImage ? { file: config.referenceImage, previewUrl: "" } : null,
-        lockIdentity: config.lockIdentity
+        lockIdentity: config.lockIdentity,
+        previousResultBase64: originalImageSrc // Feed original for visual continuity
       },
       {
         saree: {
           analyzedTextureDescription: "",
-          palluStyle: palluStyle,
-          designType: designType,
-          palluMeasurement: palluMeasurement,
-          hasStoneWork: hasStoneWork,
-          stoneWorkLocation: stoneWorkLocation,
-          jewelleryLevel: 'None',
-          hasBindi: false
-        }
+          palluStyle: categorySpecificConfig.saree?.palluStyle || 'Nivi Style',
+          designType: categorySpecificConfig.saree?.designType || 'Traditional',
+          palluMeasurement: categorySpecificConfig.saree?.palluMeasurement || '',
+          hasStoneWork: categorySpecificConfig.saree?.hasStoneWork || false,
+          stoneWorkLocation: categorySpecificConfig.saree?.stoneWorkLocation || 'Border Only',
+          jewelleryLevel: 'Keep As Is',
+          hasBindi: false,
+          colorMatchingEnabled: false,
+          viewMode: 'model'
+        },
+        kurti: categorySpecificConfig.kurti as KurtiConfig,
+        jewelry: categorySpecificConfig.jewelry as JewelryConfig,
+        lehenga: categorySpecificConfig.lehenga as LehengaConfig
       }
     );
   }
+
+  // PATH 3: Background Change Only
   if (config.locks.saree && config.locks.model && !config.locks.background) {
     const [, base64Data] = originalImageSrc.split(',');
-    return refineGeneratedImage(base64Data, 'image/jpeg', `Change bg to ${config.background}`);
+    const bgPrompt = `Change ONLY the background to: ${config.background}. Preserve the person, clothing, accessories, and pose with zero alterations. Adapt lighting and color grading to naturally match the new environment. Maintain photographic realism with proper depth of field.`;
+    return refineGeneratedImage(base64Data, 'image/jpeg', bgPrompt, effectiveResolution as any);
   }
+
+  // PATH 4: Direct Saree/Garment Edit (no mask)
   const [, base64Data] = originalImageSrc.split(',');
-  return refineGeneratedImage(base64Data, 'image/jpeg', config.sareeEditPrompt);
+  const colorInstruction = config.sareeColor ? ` Change the garment color to: ${config.sareeColor}.` : '';
+  const editPrompt = `Edit the garment in this image. ${config.sareeEditPrompt}.${colorInstruction} Preserve the model's face, body, pose, and background exactly. Maintain photographic realism and consistent lighting.`;
+  return refineGeneratedImage(base64Data, 'image/jpeg', editPrompt, effectiveResolution as any);
 };
 
 export const analyzeReferenceVideo = async (videoFile: File): Promise<import('../types').VideoPromptSegment[]> => {
@@ -995,7 +1242,8 @@ export const generateFashionVideo = async (
   category: 'saree' | 'kurti' | 'jewelry' | 'lehenga',
   prompt: string,
   startingImageBase64: string,
-  onStatusUpdate?: (status: string) => void
+  onStatusUpdate?: (status: string) => void,
+  customMovement?: boolean
 ): Promise<{ url: string, videoResource: any }> => {
   const apiKey = getActiveApiKey();
   await ensurePaidApiKey();
@@ -1003,14 +1251,28 @@ export const generateFashionVideo = async (
   const [, data] = startingImageBase64.split(',');
 
   let contextPrefix = "";
-  if (category === 'jewelry') {
-    contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
-  } else if (category === 'kurti') {
-    contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
-  } else if (category === 'lehenga') {
-    contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+  if (customMovement) {
+    // Neutral appearance-only prefix — user's custom prompt drives the motion
+    if (category === 'jewelry') {
+      contextPrefix = "Luxury jewelry with gemstones and polished metal surfaces.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing Indian Kurti.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Model wearing a heavy Lehenga with embroidery and dupatta.";
+    } else {
+      contextPrefix = "Model wearing a draped saree with flowing silk fabric.";
+    }
   } else {
-    contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    // Standard motion-prescribing prefix for predefined templates
+    if (category === 'jewelry') {
+      contextPrefix = "Cinematic jewelry product shot. Macro video. High luxury. Focus on light reflection on metal and gems.";
+    } else if (category === 'kurti') {
+      contextPrefix = "Fashion model wearing ethnic Kurti. Modern chic vibe.";
+    } else if (category === 'lehenga') {
+      contextPrefix = "Fashion model wearing voluminous Lehenga Choli. Grand royal wedding vibe. Focus on skirt flare and embroidery.";
+    } else {
+      contextPrefix = "Saree showcase. Traditional elegance. Flowing fabric.";
+    }
   }
 
   try {
@@ -1026,8 +1288,15 @@ export const generateFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video generation failed: No video URI returned. The content may have been blocked by safety filters, or the model could not generate a video from this image/prompt. Please try a different image or prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download generated video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
@@ -1055,8 +1324,15 @@ export const extendFashionVideo = async (
       operation = await ai.operations.getVideosOperation({ operation: operation });
     }
     const videoResource = operation.response?.generatedVideos?.[0]?.video;
-    const finalUrl = `${videoResource?.uri}&key=${apiKey}`;
+    if (!videoResource?.uri) {
+      console.error('Veo extend response:', JSON.stringify(operation.response, null, 2));
+      throw new Error('Video extension failed: No video URI returned. The content may have been blocked by safety filters. Please try a different prompt.');
+    }
+    const finalUrl = `${videoResource.uri}&key=${apiKey}`;
     const response = await fetch(finalUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download extended video (HTTP ${response.status}). Please try again.`);
+    }
     const blob = await response.blob();
     return { url: URL.createObjectURL(blob), videoResource };
   } catch (error) {
