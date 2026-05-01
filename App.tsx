@@ -14,6 +14,7 @@ import { PlusIcon } from './components/icons/PlusIcon';
 import { RefreshIcon } from './components/icons/RefreshIcon';
 import { VideoIcon } from './components/icons/VideoIcon';
 import VariationModal from './components/VariationModal';
+import BatchUploadModal from './components/BatchUploadModal';
 import VideoModal from './components/VideoModal';
 import VideoStudio from './components/VideoStudio';
 import SareeWorkflow from './components/workflows/SareeWorkflow';
@@ -146,6 +147,7 @@ const MainApp: React.FC = () => {
   const [selectedImageForVariation, setSelectedImageForVariation] = useState<{ src: string, index: number } | null>(null);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [selectedImageForVideo, setSelectedImageForVideo] = useState<string | null>(null);
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
 
   // Presets State
   const [presets, setPresets] = useState<SavedPreset[]>([]);
@@ -598,6 +600,42 @@ const MainApp: React.FC = () => {
 
   const handleUndoBatch = useCallback(() => { if (lastBatch) { setGeneratedImages(lastBatch); setLastBatch(null); } }, [lastBatch]);
 
+  // --- Batch Upload Handler ---
+  const handleBatchApply = useCallback((assignments: Record<string, File>) => {
+    const imageUpdates: Record<string, { file: File; previewUrl: string }> = {};
+    let referenceFile: File | null = null;
+
+    Object.entries(assignments).forEach(([slotId, file]) => {
+      if (slotId === 'reference') {
+        referenceFile = file;
+      } else {
+        imageUpdates[slotId] = { file, previewUrl: URL.createObjectURL(file) };
+      }
+    });
+
+    // Apply to the correct category in one batch
+    if (activeCategory === 'saree') {
+      setSareeImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'kurti') {
+      setKurtiImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'lehenga') {
+      setLehengaImages(prev => ({ ...prev, ...imageUpdates }));
+    } else if (activeCategory === 'jewelry') {
+      setJewelryImages(prev => ({ ...prev, ...imageUpdates }));
+    }
+
+    if (referenceFile) {
+      setReferenceImage({ file: referenceFile, previewUrl: URL.createObjectURL(referenceFile) });
+      setReferenceAnalysis(null);
+    }
+
+    // Clear generated results once (not per-file)
+    setGeneratedImages([]);
+    setLastBatch(null);
+    setError(null);
+    setBatchModalOpen(false);
+  }, [activeCategory]);
+
   const handleResetForm = useCallback(() => {
     setSareeImages({ fullSaree: null, border: null, pallu: null, skirt: null, blouse: null, embroidery: null });
     setKurtiImages({ frontView: null, bottoms: null, fabricDetail: null, dupatta: null, secondaryFabricDetail: null });
@@ -755,6 +793,17 @@ const MainApp: React.FC = () => {
 
                 {activeTab === 'draping' && (
                   <>
+                    {/* Batch Upload Button */}
+                    <button
+                      onClick={() => setBatchModalOpen(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 mb-2 bg-gradient-to-r from-indigo-50 to-rose-50 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-700 font-semibold text-sm hover:from-indigo-100 hover:to-rose-100 hover:border-indigo-300 transition-all duration-200 group"
+                    >
+                      <svg className="w-5 h-5 text-indigo-500 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Batch Upload Photos
+                      <span className="text-xs font-normal text-indigo-400 hidden sm:inline">— upload multiple & assign at once</span>
+                    </button>
                     {activeCategory === 'saree' && (
                       <SareeWorkflow
                         images={sareeImages}
@@ -981,6 +1030,12 @@ const MainApp: React.FC = () => {
           category={activeCategory}
         />
       )}
+      <BatchUploadModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        category={activeCategory}
+        onApply={handleBatchApply}
+      />
       <CostTracker />
     </div>
   );
